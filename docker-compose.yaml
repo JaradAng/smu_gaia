@@ -33,11 +33,13 @@ services:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
     volumes:
       - ./gaia/data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
   chunker:
     build:
       context: ./chunker
       dockerfile: Dockerfile
+    image: chunker
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -48,6 +50,7 @@ services:
     build:
       context: ./vector_db
       dockerfile: Dockerfile
+    image: vector_db
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -58,6 +61,7 @@ services:
     build:
       context: ./graph_db
       dockerfile: Dockerfile
+    image: graph_db
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -68,6 +72,7 @@ services:
     build:
       context: ./llm
       dockerfile: Dockerfile
+    image: llm
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -78,6 +83,7 @@ services:
     build:
       context: ./prompt
       dockerfile: Dockerfile
+    image: prompt
     depends_on:
       rabbitmq:
         condition: service_healthy
