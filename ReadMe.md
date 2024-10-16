@@ -47,19 +47,6 @@ Copy code
 git clone https://github.com/yourusername/gaia.git
 Replace yourusername with the actual GitHub username or repository path.
 
-Environment Variables
-The system uses environment variables for configuration. Create a .env file in the root directory of the project and add the following variables:
-
-env
-Copy code
-CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
-DOCKER_NETWORK=gaia_default
-DOCKER_IMAGE_CHUNKER=chunker
-DOCKER_IMAGE_LLM=llm
-DOCKER_IMAGE_VECTOR_DB=vector_db
-DOCKER_IMAGE_GRAPH_DB=graph_db
-DOCKER_IMAGE_PROMPT=prompt
-These variables can be customized based on your setup.
 
 Directory Structure
 Ensure your directory structure resembles the following:
