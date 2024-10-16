@@ -1,90 +1,175 @@
+from celery import Celery
+from celery.bin import worker as celery_worker
+import logging
+import os
 import json
 import random
-import os
-from celery import Celery
+from dataclasses import dataclass, field, asdict
+from typing import List, Optional
 
-# Celery configuration
-RABBITMQ_URL = os.getenv('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
-app = Celery('prompt_generator', broker=RABBITMQ_URL, backend='rpc://')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Celery configuration
-app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
+app = Celery(
+    "gaia",
+    broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
 )
 
-def load_json(file_path):
-    with open(file_path, 'r') as file:
-        return json.load(file)
+# ProjectData class definition
+@dataclass
+class KG:
+    kgTriples: List[str]
+    ner: List[str]
 
-def save_json(data, file_path):
-    with open(file_path, 'w') as file:
-        json.dump(data, file, indent=2)
+@dataclass
+class Chunker:
+    chunkingMethod: Optional[str] = None
+    chunks: Optional[List[str]] = None
 
-def generate_zero_shot_prompt(query, text, triples):
-    prompt = f"Based on the following data:\n{text}\n{triples}\nWhat is {query}"
-    return prompt
+@dataclass
+class LLM:
+    llm: Optional[str] = None
+    llmResult: Optional[str] = None
 
-def generate_tag_based_prompt(query, text, triples):
-    tags = ["<instruction>", "<context>", "<input>", "<output>"]
-    selected_tags = random.sample(tags, 3)  # Randomly select 3 tags
-    
-    prompt = f"{selected_tags[0]} Answer the following question based on the provided information.\n"
-    prompt += f"{selected_tags[1]} Text: {text}\nKnowledge Graph: {triples}\n"
-    prompt += f"{selected_tags[2]} {query}"
-    
-    return prompt
+@dataclass
+class ProjectData:
+    id: str
+    domain: str
+    docsSource: str
+    queries: Optional[List[str]] = None
+    textData: Optional[str] = None
+    embedding: Optional[str] = None
+    vectorDB: Optional[str] = None
+    ragText: Optional[str] = None
+    kg: KG = field(default_factory=KG)
+    chunker: Chunker = field(default_factory=Chunker)
+    llm: LLM = field(default_factory=LLM)
+    vectorDBLoaded: Optional[bool] = None
+    similarityIndices: Optional[dict] = None
+    generatedResponse: Optional[str] = None
 
-def generate_reasoning_prompt(query, text, triples):
-    prompt = "<instruction> Answer the following question based on the provided information.\n"
-    prompt += f"<context> Text: {text}\nKnowledge Graph: {triples}\n"
-    prompt += f"<input> {query}\n"
-    prompt += "<reasoning> Explain your thought process step by step.\n"
-    prompt += "<thinking> Break down the problem and analyze it systematically."
-    
-    return prompt
+    def to_dict(self):
+        return {k: v for k, v in asdict(self).items() if v is not None}
 
-@app.task(name='generate_prompts')
-def generate_prompts(input_file_path):
-    # Load the JSON file
-    data = load_json(input_file_path)
-    
-    query = data['query']
-    text = data['text']
-    triples = data['knowledge_graph']
-    
-    # Generate prompts
-    prompts = {
-        "zero_shot": generate_zero_shot_prompt(query, text, triples),
-        "tag_based": generate_tag_based_prompt(query, text, triples),
-        "reasoning": generate_reasoning_prompt(query, text, triples)
+    @classmethod
+    def from_dict(cls, data: dict):
+        try:
+            return cls(**data)
+        except TypeError as e:
+            raise ValueError(f"Invalid data structure: {str(e)}")
+
+    def to_json(self):
+        try:
+            return json.dumps(self.to_dict(), indent=2)
+        except TypeError as e:
+            raise ValueError(f"Cannot serialize to JSON: {str(e)}")
+
+    @classmethod
+    def from_json(cls, json_str: str):
+        try:
+            return cls.from_dict(json.loads(json_str))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON string: {str(e)}")
+
+# Prompt generation functions
+def generate_zero_shot_prompt(project_data: ProjectData):
+    try:
+        prompt = f"Based on the following data:\n"
+        prompt += f"Text: {project_data.ragText}\n"
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+        prompt += f"What is {project_data.queries[0] if project_data.queries else 'the main topic'}"
+        return prompt
+    except AttributeError as e:
+        raise ValueError(f"Missing required attribute in ProjectData: {str(e)}")
+
+def generate_tag_based_prompt(project_data: ProjectData):
+    try:
+        tags = ["<instruction>", "<context>", "<input>", "<output>"]
+        selected_tags = random.sample(tags, 3)
+        prompt = f"{selected_tags[0]} Answer the following question based on the provided information.\n"
+        prompt += f"{selected_tags[1]} Domain: {project_data.domain}\n"
+        prompt += f"Text: {project_data.ragText}\n"
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+        prompt += f"{selected_tags[2]} {project_data.queries[0] if project_data.queries else 'What is the main topic?'}"
+        return prompt
+    except AttributeError as e:
+        raise ValueError(f"Missing required attribute in ProjectData: {str(e)}")
+
+def generate_reasoning_prompt(project_data: ProjectData):
+    try:
+        prompt = "<instruction> Answer the following question based on the provided information.\n"
+        prompt += f"<context> Domain: {project_data.domain}\n"
+        prompt += f"Text: {project_data.ragText}\n"
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+        prompt += f"<input> {project_data.queries[0] if project_data.queries else 'What is the main topic?'}\n"
+        prompt += "<reasoning> Explain your thought process step by step.\n"
+        prompt += "<thinking> Break down the problem and analyze it systematically."
+        return prompt
+    except AttributeError as e:
+        raise ValueError(f"Missing required attribute in ProjectData: {str(e)}")
+
+@app.task(name="prompt", bind=True, max_retries=3)
+def prompt_task(self, data):
+    """
+    Task for enhancing a prompt.
+    Generates three types of prompts based on the input data.
+    """
+    logger.info(f"Prompt received: {data}")
+
+    try:
+        project_data = ProjectData.from_json(data)
+        
+        prompts = {
+            "zero_shot": generate_zero_shot_prompt(project_data),
+            "tag_based": generate_tag_based_prompt(project_data),
+            "reasoning": generate_reasoning_prompt(project_data)
+        }
+        
+        project_data.llm.llmResult = json.dumps(prompts)
+        enhanced_prompt = project_data.to_json()
+
+        logger.info(f"Prompts generated: {prompts}")
+        return enhanced_prompt
+    except ValueError as e:
+        logger.error(f"Invalid input data: {str(e)}")
+        return json.dumps({"error": f"Invalid input data: {str(e)}"})
+    except AttributeError as e:
+        logger.error(f"Missing required attribute: {str(e)}")
+        return json.dumps({"error": f"Missing required attribute: {str(e)}"})
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        self.retry(exc=e, countdown=60)  # Retry after 60 seconds
+
+def send_prompt_task(data):
+    """
+    Helper function to send the prompt task to Celery.
+    """
+    try:
+        result = prompt_task.delay(data)
+        return result.get(timeout=300)  # 5 minutes timeout
+    except Exception as e:
+        logger.error(f"Error sending prompt task: {str(e)}")
+        return json.dumps({"error": f"Error sending prompt task: {str(e)}"})
+
+def start_celery_worker():
+    """
+    Start the Celery worker programmatically.
+    """
+    logger.info("Starting Celery worker for prompt task.")
+    worker = celery_worker.worker(app=app)
+    options = {
+        "loglevel": "INFO",
+        "traceback": True,
     }
-    
-    # Prepare output data
-    output_data = {
-        "input": data,
-        "prompts": prompts
-    }
-    
-    # Save output to a new JSON file
-    output_file_path = input_file_path.replace('.json', '_output.json')
-    save_json(output_data, output_file_path)
-    
-    # Trigger the LLM agent task
-    trigger_llm_agent.delay(output_file_path)
-    
-    return output_file_path
 
-@app.task(name='trigger_llm_agent')
-def trigger_llm_agent(output_file_path):
-    # This is a placeholder for the LLM agent task
-    # You would implement the actual LLM processing here
-    print(f"LLM agent triggered with file: {output_file_path}")
-    # Process the file with your LLM logic
-    # ...
+    try:
+        worker.run(**options)
+    except Exception as e:
+        logger.error(f"Error starting Celery worker: {str(e)}")
 
-if __name__ == '__main__':
-    app.start()
+if __name__ == "__main__":
+    logger.info("Starting Celery app.")
+    try:
+        app.start()
+    except Exception as e:
+        logger.error(f"Error starting Celery app: {str(e)}")
