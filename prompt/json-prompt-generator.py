@@ -5,7 +5,7 @@ import os
 import json
 import random
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,7 +15,6 @@ app = Celery(
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
 )
 
-# ProjectData class definition
 @dataclass
 class KG:
     kgTriples: List[str]
@@ -32,6 +31,13 @@ class LLM:
     llmResult: Optional[str] = None
 
 @dataclass
+class Prompts:
+    zeroShot: Optional[str] = None
+    tagBased: Optional[str] = None
+    reasoning: Optional[str] = None
+    custom: Optional[List[str]] = None
+
+@dataclass
 class ProjectData:
     id: str
     domain: str
@@ -44,6 +50,7 @@ class ProjectData:
     kg: KG = field(default_factory=KG)
     chunker: Chunker = field(default_factory=Chunker)
     llm: LLM = field(default_factory=LLM)
+    prompts: Prompts = field(default_factory=Prompts)
     vectorDBLoaded: Optional[bool] = None
     similarityIndices: Optional[dict] = None
     generatedResponse: Optional[str] = None
@@ -71,8 +78,7 @@ class ProjectData:
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON string: {str(e)}")
 
-# Prompt generation functions
-def generate_zero_shot_prompt(project_data: ProjectData):
+def generate_zero_shot_prompt(project_data: ProjectData) -> str:
     try:
         prompt = f"Based on the following data:\n"
         prompt += f"Text: {project_data.ragText}\n"
@@ -82,7 +88,7 @@ def generate_zero_shot_prompt(project_data: ProjectData):
     except AttributeError as e:
         raise ValueError(f"Missing required attribute in ProjectData: {str(e)}")
 
-def generate_tag_based_prompt(project_data: ProjectData):
+def generate_tag_based_prompt(project_data: ProjectData) -> str:
     try:
         tags = ["<instruction>", "<context>", "<input>", "<output>"]
         selected_tags = random.sample(tags, 3)
@@ -95,7 +101,7 @@ def generate_tag_based_prompt(project_data: ProjectData):
     except AttributeError as e:
         raise ValueError(f"Missing required attribute in ProjectData: {str(e)}")
 
-def generate_reasoning_prompt(project_data: ProjectData):
+def generate_reasoning_prompt(project_data: ProjectData) -> str:
     try:
         prompt = "<instruction> Answer the following question based on the provided information.\n"
         prompt += f"<context> Domain: {project_data.domain}\n"
@@ -119,16 +125,13 @@ def prompt_task(self, data):
     try:
         project_data = ProjectData.from_json(data)
         
-        prompts = {
-            "zero_shot": generate_zero_shot_prompt(project_data),
-            "tag_based": generate_tag_based_prompt(project_data),
-            "reasoning": generate_reasoning_prompt(project_data)
-        }
+        project_data.prompts.zeroShot = generate_zero_shot_prompt(project_data)
+        project_data.prompts.tagBased = generate_tag_based_prompt(project_data)
+        project_data.prompts.reasoning = generate_reasoning_prompt(project_data)
         
-        project_data.llm.llmResult = json.dumps(prompts)
         enhanced_prompt = project_data.to_json()
 
-        logger.info(f"Prompts generated: {prompts}")
+        logger.info(f"Prompts generated: {project_data.prompts}")
         return enhanced_prompt
     except ValueError as e:
         logger.error(f"Invalid input data: {str(e)}")
