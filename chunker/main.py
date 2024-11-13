@@ -2,6 +2,7 @@ from celery import Celery
 from celery.bin import worker as celery_worker
 import logging
 import os
+import json
 
 # Initialize logger
 logging.basicConfig(level=logging.INFO)
@@ -18,15 +19,32 @@ app = Celery(
 def chunker_task(data):
     """
     Task for chunking a document.
-    Simulates chunking a document into parts (chunks).
+    Expects a JSON string containing textData and optional chunkingMethod.
     """
     logger.info(f"Chunker received: {data}")
-
-    # Simulated for testing
-    chunks = [f"Chunk {i}" for i in range(1, 4)]
-
-    logger.info(f"Chunker produced: {chunks}")
-    return chunks
+    
+    try:
+        data_dict = json.loads(data)
+        text = data_dict.get("textData", "")
+        method = data_dict.get("chunkingMethod", "paragraph")
+        
+        # Simulated chunking (replace with actual chunking logic)
+        chunks = [text[i:i+100] for i in range(0, len(text), 100)]
+        
+        result = {
+            "chunkingMethod": method,
+            "chunks": chunks
+        }
+        
+        logger.info(f"Chunker produced: {result}")
+        return json.dumps(result)
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON input: {str(e)}")
+        return json.dumps({"error": f"Invalid JSON input: {str(e)}"})
+    except Exception as e:
+        logger.error(f"Error processing chunks: {str(e)}")
+        return json.dumps({"error": f"Error processing chunks: {str(e)}"})
 
 
 def send_chunking_task(data):
