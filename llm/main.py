@@ -2,6 +2,7 @@ from celery import Celery
 from celery.bin import worker as celery_worker
 import logging
 import os
+import json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -17,16 +18,36 @@ app = Celery(
 @app.task(name="llm")
 def llm_task(data):
     """
-    Task for processing data using a Language Learning Model (LLM).
-    Simulates generating a response based on input data.
+    Task for LLM processing.
+    Expects a JSON string containing textData and queries.
     """
     logger.info(f"LLM received: {data}")
-
-    # Simulated for testing
-    result = f"LLM generated response for: {data}"
-
-    logger.info(f"LLM produced: {result}")
-    return result
+    
+    try:
+        data_dict = json.loads(data)
+        text = data_dict.get("textData", "")
+        queries = data_dict.get("queries", [])
+        
+        # Simulated LLM processing (replace with actual LLM logic)
+        responses = []
+        for query in queries:
+            response = f"Processed response for query: {query}"
+            responses.append(response)
+        
+        result = {
+            "llm": "gpt-4",  # or whatever LLM is being used
+            "llmResult": " | ".join(responses)
+        }
+        
+        logger.info(f"LLM produced: {result}")
+        return json.dumps(result)
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON input: {str(e)}")
+        return json.dumps({"error": f"Invalid JSON input: {str(e)}"})
+    except Exception as e:
+        logger.error(f"Error in LLM processing: {str(e)}")
+        return json.dumps({"error": f"Error in LLM processing: {str(e)}"})
 
 
 def send_llm_task(data):
