@@ -32,18 +32,22 @@ def llm_task(data):
         # Process each query using the legal LLM
         responses = []
         for query in queries:
-            result = process_legal_query(context=text, question=query)
-            responses.append(result["response"]["raw_text"])
+            response = f"Processed response for query: {query}"
+            responses.append(response)
+        #     result = process_legal_query(context=text, question=query)
+        #     responses.append(result["response"]["raw_text"])
         
         result = {
-            "llm": "legal-bert",
-            "llmResult": " | ".join(responses),
-            "metrics": {
-                "response_times": [result["performance_metrics"]["response_time"]],
-                "token_counts": [result["performance_metrics"]["token_count"]],
-                "cpu_usage": result["resource_usage"]["cpu_usage_percent"],
-                "memory_usage": result["resource_usage"]["memory_usage_percent"]
-            }
+            "llm": "gpt-4",  # or whatever LLM is being used
+            "llmResult": " | ".join(responses)
+            # "llm": "legal-bert",
+            # "llmResult": " | ".join(responses),
+            # "metrics": {
+            #     "response_times": [result["performance_metrics"]["response_time"]],
+            #     "token_counts": [result["performance_metrics"]["token_count"]],
+            #     "cpu_usage": result["resource_usage"]["cpu_usage_percent"],
+            #     "memory_usage": result["resource_usage"]["memory_usage_percent"]
+            # }
         }
         
         logger.info(f"LLM produced: {result}")
