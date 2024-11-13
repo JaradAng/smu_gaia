@@ -10,9 +10,9 @@ model_name = "nlpaueb/legal-bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForQuestionAnswering.from_pretrained(model_name)
 
-def run_legal_llm_analysis(context, question):
-    # Tokenize input (context and question)
-    inputs = tokenizer(question, context, return_tensors="pt", truncation=True)
+def run_legal_llm_analysis(question):
+    # Tokenize input (just the question in this case)
+    inputs = tokenizer(question, return_tensors="pt", truncation=True)
     start_time = time.time()
 
     # Perform inference with the model
@@ -44,7 +44,6 @@ def run_legal_llm_analysis(context, question):
             "provider": "Hugging Face"
         },
         "input_processing": {
-            "context_text": context,
             "question_text": question,
             "token_count": token_count
         },
