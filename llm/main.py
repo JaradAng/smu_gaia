@@ -3,6 +3,7 @@ from celery.bin import worker as celery_worker
 import logging
 import os
 import json
+from legal_llm_analysis import process_legal_query
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -28,15 +29,21 @@ def llm_task(data):
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
         
-        # Simulated LLM processing (replace with actual LLM logic)
+        # Process each query using the legal LLM
         responses = []
         for query in queries:
-            response = f"Processed response for query: {query}"
-            responses.append(response)
+            result = process_legal_query(context=text, question=query)
+            responses.append(result["response"]["raw_text"])
         
         result = {
-            "llm": "gpt-4",  # or whatever LLM is being used
-            "llmResult": " | ".join(responses)
+            "llm": "legal-bert",
+            "llmResult": " | ".join(responses),
+            "metrics": {
+                "response_times": [result["performance_metrics"]["response_time"]],
+                "token_counts": [result["performance_metrics"]["token_count"]],
+                "cpu_usage": result["resource_usage"]["cpu_usage_percent"],
+                "memory_usage": result["resource_usage"]["memory_usage_percent"]
+            }
         }
         
         logger.info(f"LLM produced: {result}")
