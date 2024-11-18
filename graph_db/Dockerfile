@@ -11,6 +11,7 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 COPY main.py .
+COPY neo4j_input.py
 
 CMD ["celery", "-A", "main", "worker", "-l", "info", "-Q", "graph_db"]
 
