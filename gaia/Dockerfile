@@ -13,6 +13,7 @@ RUN apk add --no-cache \
     libffi-dev \
     docker-cli
 
+# Copy and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
