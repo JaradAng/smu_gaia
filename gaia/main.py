@@ -14,7 +14,7 @@ from utils.data_models import ProjectData
 def calculate_desired_containers(queue_length):
 
     MAX_TASKS_PER_CONTAINER = 5
-    return (queue_length // MAX_TASKS_PER_CONTAINER) + 1
+    return (queue_length // MAX_TASKS_PER_CONTAINER)
 
 
 def monitor_and_scale():
