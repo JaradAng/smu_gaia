@@ -134,24 +134,3 @@ class Neo4jTripleImporter:
 
         self.driver.close()
         return results
-
-
-    def interactive_query(self):
-        """
-        Interactive function to query the knowledge graph using natural language.
-        """
-        uri = "neo4j://localhost:7687"
-        user = "neo4j"
-        password = "your_password"  # Replace with your password
-
-        print("\nKnowledge Graph Query Interface")
-        print("===============================")
-
-        while True:
-            print("\nEnter your question (or 'exit' to quit):")
-            question = input("> ")
-
-            if question.lower() == 'exit':
-                break
-            
-            results = self.query_knowledge_graph(question)

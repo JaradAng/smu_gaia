@@ -1,4 +1,3 @@
-import asyncio
 from collections import defaultdict
 from celery import Celery
 from celery.bin import worker as celery_worker
@@ -16,22 +15,6 @@ app = Celery(
     "gaia",
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
 )
-
-
-@app.task(name="graph_db")
-def parse_json_data(data: str):
-    """
-    Parse JSON string and extract KG-related information.
-    """
-    try:
-        if isinstance(data, str):
-            parsed_data = json.loads(data)
-        else:
-            parsed_data = data
-        return parsed_data
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON: {e}")
-        return None
 
 def extract_triples(textData: str):
     nlp = spacy.load("en_core_web_sm")
@@ -59,57 +42,53 @@ def extract_triples(textData: str):
                 # If we have both subject and object, add the triple
                 if subj and obj:
                     triple = (
-                        subj.text.lower(),  # Corrected: Use .text
-                        token.text.lower(),  # Corrected: Use .text
-                        obj.text.lower()     # Corrected: Use .text
+                        subj.text.lower(), 
+                        token.text.lower(),  
+                        obj.text.lower()   
                     )
                     triples.append(triple)
 
     return triples
 
-@app.task(name='graph_db_task')
+@app.task(name="graph_db")
 def graph_db_task(data):
     """
     Task for Graph DB operations.
     Expects a JSON string containing textData and queries.
     """
-    data = parse_json_data(data)
-    if not data:
-        logger.error("Failed to parse data")
-        return None
-
-    textData = data.get('textData', "")
-    queries = data.get('queries', [])
-
-    logger.info(f"Graph DB received: {data}")
-    logger.info(f"text data: {textData}")
-    logger.info(f"queries: {queries}")
-
-    triples_list = extract_triples(textData)
-    importer = neo()
-    
     try:
         data_dict = json.loads(data)
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
-        
-        # Simulated knowledge graph processing (replace with actual KG logic)
-        # Here you would typically:
+
+        logger.info(f"Graph DB received: {data_dict}")
+        logger.info(f"text data: {text}")
+        logger.info(f"queries: {queries}")
+
         # 1. Extract entities and relationships
-        # 2. Create knowledge graph triples
-        # 3. Store in graph database
-        
+        triples_list = extract_triples(text)
+
+        # 2. Create knowledge graph triples and # 3. Store in graph database
+        importer = neo()
+        importer.import_triples(triples_list)
+
+        # Initializing result structure
         result = {
-            "kgTriples": [
-                "entity1 - relation1 - entity2",
-                "entity2 - relation2 - entity3",
-                "entity1 - relation3 - entity4",
-                "entity3 - relation4 - entity5",
-                "entity4 - relation5 - entity5"
-            ],
-            "ner": ["spacy", "nltk"],  # List of NER techniques used
+            "kgTriples": [],
+            "ner": ["spacy"]
         }
-        
+
+        for query in queries:
+            kg_triples = importer.query_knowledge_graph(query)
+
+            formatted_kg_triples = [f"{subject} - {relation} - {object}" 
+                        for subject, relation, object in kg_triples]
+            
+            result["kgTriples"].extend(formatted_kg_triples)
+
+        # Remove duplicates
+        result["kgTriples"] = list(dict.fromkeys(result["kgTriples"]))
+
         logger.info(f"Graph DB produced: {result}")
         return json.dumps(result)
         
@@ -120,28 +99,12 @@ def graph_db_task(data):
         logger.error(f"Error in Graph DB processing: {str(e)}")
         return json.dumps({"error": f"Error in Graph DB processing: {str(e)}"})
 
-        importer.import_triples(triples_list)
-        result = {}
-        for query in queries:
-            result[query] = importer.query_knowledge_graph(query)
-    except Exception as e:
-        logger.error(f"Error during Neo4j operations: {e}")
-        return None
-
-    logger.info(f"Graph DB produced: {result}")
-    return result
-
-async def send_graph_db_task(data):
+def send_graph_db_task(data):
     """
-    Helper function to send the graph DB task to Celery asynchronously.
+    Helper function to send the graph DB task to Celery.
     """
     result = graph_db_task.delay(data)  # Send task asynchronously
-
-    # Use asyncio to wait for the result without blocking
-    while not result.ready():
-        await asyncio.sleep(0.1)  # Non-blocking wait for 100ms
-
-    return result.result
+    return result.get()  # Wait for the result and return it
 
 def start_celery_worker():
     """
