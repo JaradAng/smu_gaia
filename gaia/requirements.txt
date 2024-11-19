@@ -3,4 +3,3 @@ kombu
 amqp
 pytz
 sqlalchemy
-docker
