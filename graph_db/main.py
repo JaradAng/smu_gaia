@@ -67,6 +67,7 @@ def graph_db_task(data):
 
         # 1. Extract entities and relationships
         triples_list = extract_triples(text)
+        logger.info(f"Here are the triples I found: {triples_list}")
 
         # 2. Create knowledge graph triples and # 3. Store in graph database
         importer = neo()
@@ -79,7 +80,7 @@ def graph_db_task(data):
         }
 
         for query in queries:
-            kg_triples = importer.query_knowledge_graph(query)
+            kg_triples = importer.query_knowledge_graph(query, use_dependency_parsing=True)
 
             formatted_kg_triples = [f"{subject} - {relation} - {object}" 
                         for subject, relation, object in kg_triples]
