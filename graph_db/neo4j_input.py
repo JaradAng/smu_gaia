@@ -36,6 +36,7 @@ class Neo4jTripleImporter:
 
     def import_triples(self, triples: List[Tuple[str,str,str]]):
 
+        logger.info(f"importing triples into KG")
         def create_relationship(tx, subj, pred, obj):
             # Create nodes and relationship if they don't exist
             query = f"""
