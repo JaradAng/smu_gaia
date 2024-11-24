@@ -17,38 +17,71 @@ app = Celery(
 )
 
 def extract_triples(textData: str):
+    import spacy
     nlp = spacy.load("en_core_web_sm")
     doc = nlp(textData)
     triples = []
 
+    def get_core_phrase(token):
+        """
+        Extract the core phrase for a subject or object by excluding determiners and
+        prepositional modifiers while keeping essential descriptors.
+        """
+        # Start with the subtree of the token
+        words = [t for t in token.subtree if t.dep_ not in {"det", "prep", "punct"}]
+        # Join the words to form a clean phrase
+        return " ".join([t.text for t in words]).lower()
+
     for sent in doc.sents:
+        logger.info(f"Sentence we are analyzing: {sent}")
         for token in sent:
-            # Look for verbs as they often represent relationships
-            if token.pos_ == "VERB":
+            # Look for main verbs or auxiliary verbs with attributes
+            if token.pos_ in ["VERB", "AUX"] or (token.pos_ == "ADJ" and token.dep_ == "acomp"):
                 # Find subject
                 subj = None
-                for child in token.lefts:
+                for child in token.head.lefts if token.dep_ == "acomp" else token.lefts:
                     if child.dep_ in ["nsubj", "nsubjpass"]:
                         subj = child
                         break
 
-                # Find object
+                # Find object or attribute
                 obj = None
                 for child in token.rights:
-                    if child.dep_ in ["dobj", "pobj"]:
+                    if child.dep_ in ["dobj", "pobj", "attr"]:
                         obj = child
                         break
+                    # Handle prepositional phrases
+                    elif child.dep_ == "prep":
+                        for grandchild in child.children:
+                            if grandchild.dep_ == "pobj":
+                                obj = grandchild
+                                break
+                        if obj:
+                            break
+
+                # Handle attributes for copular verbs (e.g., "is elephants")
+                if token.dep_ == "ROOT" and token.pos_ in ["VERB", "AUX"] and not obj:
+                    for child in token.children:
+                        if child.dep_ == "attr":
+                            obj = child
+                            break
 
                 # If we have both subject and object, add the triple
                 if subj and obj:
-                    triple = (
-                        subj.text.lower(), 
-                        token.text.lower(),  
-                        obj.text.lower()   
-                    )
+                    # Extract core phrases for subject and object
+                    subj_phrase = get_core_phrase(subj)
+                    obj_phrase = get_core_phrase(obj)
+
+                    # Use the lemma of the predicate for consistency
+                    predicate = token.lemma_.lower()
+
+                    # Create the triple
+                    triple = (subj_phrase, predicate, obj_phrase)
+                    logger.info(f"Triple found in extract_triple: {triple}")
                     triples.append(triple)
 
     return triples
+
 
 @app.task(name="graph_db")
 def graph_db_task(data):
@@ -80,7 +113,7 @@ def graph_db_task(data):
         }
 
         for query in queries:
-            kg_triples = importer.query_knowledge_graph(query, use_dependency_parsing=True)
+            kg_triples = importer.query_knowledge_graph(query)
 
             formatted_kg_triples = [f"{subject} - {relation} - {object}" 
                         for subject, relation, object in kg_triples]
