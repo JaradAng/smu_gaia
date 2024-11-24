@@ -15,9 +15,9 @@ class Neo4jTripleImporter:
         # set the confguration to connect to your Aura DB
         logger.info(f"In Neo4j triple importer")
         # TODO: modify uri according to container networking
-        self.DB_URI = "bolt://host.docker.internal:7687"
+        self.DB_URI = "bolt://neo4j:7687"
         self.DB_USERNAME = "neo4j"
-        self.DB_PWD = "neo4j"
+        self.DB_PWD = "gaiaadmin"
 
         try:
             self.driver = GraphDatabase.driver(
