@@ -40,10 +40,10 @@ class Neo4jTripleImporter:
         logger.info(f"importing triples into KG")
         def create_relationship(tx, subj, pred, obj):
             # Create nodes and relationship if they don't exist
-            query = """
-            MERGE (s:Entity {name: $subj})
-            MERGE (o:Entity {name: $obj})
-            MERGE (s)-[:RELATIONSHIP {type: $pred}]->(o)
+            query = f"""
+            MERGE (s:Entity {{name: $subj}})
+            MERGE (o:Entity {{name: $obj}})
+            MERGE (s)-[r:{pred}]->(o)
             """
             tx.run(query, subj=subj, pred=pred, obj=obj)
 
@@ -103,16 +103,18 @@ class Neo4jTripleImporter:
                 elif not query_elements['object']:
                     query_elements['object'] = chunk.text
 
+            # TO DO: Fix perdicate finding algorithm. All predicates show as None. 
             for token in doc:
+                logger.info(f"Token looked at: {token}")
                 # Identify verbs as potential predicates
                 if token.pos_ == "VERB" and not query_elements['predicate']:
                     query_elements['predicate'] = token.lemma_
-
+                logger.info(f"predicate: {query_elements['predicate']}")
                 # Add constraints dynamically
                 if token.dep_ == "amod" or token.pos_ == "ADJ":
                     query_elements['constraints'].append(token.text)
 
-            logger.info(f"Processed question: {query_elements}")
+            logger.info(f"Processed question: {question}")
             return query_elements
         except Exception as e:
             logger.error(f"Failed to process question: {e}")
@@ -129,16 +131,15 @@ class Neo4jTripleImporter:
 
             # Basic dynamic query generation
             query = """
-            MATCH (s:Entity)-[r]->(o:Entity)
-            WHERE 
-                ($subject IS NULL OR s.name CONTAINS $subject) OR
-                ($predicate IS NULL OR type(r) CONTAINS $predicate) OR
-                ($object IS NULL OR o.name CONTAINS $object) OR
-                ($subject IS NULL OR s.name CONTAINS $object) OR
-                ($object IS NULL OR o.name CONTAINS $subject)
-            RETURN s.name AS subject, type(r) AS predicate, o.name AS object
-            LIMIT 10
-            """
+CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
+WITH s
+MATCH (s)-[r]->(o:Entity)
+WHERE 
+    ($subject IS NOT NULL AND s.name CONTAINS $subject) OR
+    ($object IS NOT NULL AND o.name CONTAINS $object)
+RETURN s.name AS subject, type(r) AS predicate, o.name AS object
+LIMIT 10
+                    """
             return query
         except Exception as e:
             logger.error(f"Failed to generate Neo4j query: {e}")

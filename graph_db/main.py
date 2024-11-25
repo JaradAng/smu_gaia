@@ -17,25 +17,26 @@ app = Celery(
 )
 
 def extract_triples(textData: str):
-    import spacy
     nlp = spacy.load("en_core_web_sm")
     doc = nlp(textData)
     triples = []
-
+    
     def get_core_phrase(token):
         """
         Extract the core phrase for a subject or object by excluding determiners and
         prepositional modifiers while keeping essential descriptors.
         """
+        logger.info("IN GET CORE PHRASE FUNCTION")
         # Start with the subtree of the token
         words = [t for t in token.subtree if t.dep_ not in {"det", "prep", "punct"}]
         # Join the words to form a clean phrase
         return " ".join([t.text for t in words]).lower()
 
+
     for sent in doc.sents:
         logger.info(f"Sentence we are analyzing: {sent}")
         for token in sent:
-            # Look for main verbs or auxiliary verbs with attributes
+            # Include both regular verbs and participles
             if token.pos_ in ["VERB", "AUX"] or (token.pos_ == "ADJ" and token.dep_ == "acomp"):
                 # Find subject
                 subj = None
@@ -44,7 +45,7 @@ def extract_triples(textData: str):
                         subj = child
                         break
 
-                # Find object or attribute
+                # Find object - include more object types
                 obj = None
                 for child in token.rights:
                     if child.dep_ in ["dobj", "pobj", "attr"]:
@@ -59,15 +60,9 @@ def extract_triples(textData: str):
                         if obj:
                             break
 
-                # Handle attributes for copular verbs (e.g., "is elephants")
-                if token.dep_ == "ROOT" and token.pos_ in ["VERB", "AUX"] and not obj:
-                    for child in token.children:
-                        if child.dep_ == "attr":
-                            obj = child
-                            break
-
                 # If we have both subject and object, add the triple
                 if subj and obj:
+                    logger.info("IF SUBJ AND OBJ FUNCTION")
                     # Extract core phrases for subject and object
                     subj_phrase = get_core_phrase(subj)
                     obj_phrase = get_core_phrase(obj)
@@ -113,6 +108,7 @@ def graph_db_task(data):
         }
 
         for query in queries:
+            logger.info("IN QUERY FUNCTION")
             kg_triples = importer.query_knowledge_graph(query)
 
             formatted_kg_triples = [f"{subject} - {relation} - {object}" 
