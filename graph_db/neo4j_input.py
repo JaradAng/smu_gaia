@@ -131,14 +131,19 @@ class Neo4jTripleImporter:
 
             # Basic dynamic query generation
             query = """
-CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
-WITH s
-MATCH (s)-[r]->(o:Entity)
-WHERE 
-    ($subject IS NOT NULL AND s.name CONTAINS $subject) OR
-    ($object IS NOT NULL AND o.name CONTAINS $object)
-RETURN s.name AS subject, type(r) AS predicate, o.name AS object
-LIMIT 10
+            CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
+            WITH s
+            MATCH (s)-[r]->(o:Entity)
+            WHERE 
+            ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $subject) > 0.6) OR
+            ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $object) > 0.6) OR
+            ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $subject) > 0.6) OR
+            ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $object) > 0.6)
+            RETURN 
+            s.name AS subject, 
+            type(r) AS predicate, 
+            o.name AS object
+            LIMIT 10
                     """
             return query
         except Exception as e:
@@ -160,6 +165,7 @@ LIMIT 10
 
             results = []
             with self.driver.session() as session:
+                session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
                 result = session.run(
                     cypher_query, 
                     subject=query_elements.get('subject', ''),
