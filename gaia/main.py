@@ -8,12 +8,14 @@ from tasks import TASK_NAMES, app  # Importing TASK_NAMES and app from tasks.py
 from autoscaler import Autoscaler
 from utils.monitoring import get_queue_length
 from utils.db import init_db, save_result
-from utils.data_models import ProjectData
+from utils.data_models import ProjectData, KnowledgeGraph, ChunkerConfig, LLMConfig
+from kombu import Queue
 
 
 def calculate_desired_containers(queue_length):
 
     MAX_TASKS_PER_CONTAINER = 5
+    return (queue_length // MAX_TASKS_PER_CONTAINER)
     return (queue_length // MAX_TASKS_PER_CONTAINER)
 
 
@@ -30,18 +32,31 @@ def monitor_and_scale():
         time.sleep(10)  # Adjust the sleep time as needed
 
 
+
 # In main.py, modify run_test()
 def run_test():
     print("Starting GAIA communication test...")
     
-    # Create test ProjectData object
+    # Create test ProjectData object with minimal test data
     test_data = ProjectData(
         domain="test_domain",
-        docsSource="test_source",
-        textData="The species of elephants is well known in the safari. Although they can withstand long droughts, their skin requires contant moisture.",
-        queries=["What is the main topic of this document?"],
-        embedding="test_embedding",
-        vectorDB="test_vectordb"
+        docsSource="/app/data",  # Path to the directory containing test_doc.txt
+        textData="Test document 1. Test document 2. Test document 3.",  # Simple sentences for NLTK
+        queries=["What are the main topics?"],
+        status="processing"
+    )
+    
+    # Initialize nested objects with test data
+    test_data.kg = KnowledgeGraph(
+        kgTriples=["entity1 - relation1 - entity2"],
+        ner=["Test"]
+    )
+    test_data.chunker = ChunkerConfig(
+        chunkingMethod="fixed_size",
+        chunks=[]
+    )
+    test_data.llm = LLMConfig(
+        llm="test_model"
     )
     
     results = {}
@@ -50,8 +65,8 @@ def run_test():
     # Send relevant parts of the ProjectData to each tool
     tool_data_mapping = {
         "chunker": {
-            "textData": test_data.textData,
-            "chunkingMethod": "paragraph"
+            "docsSource": test_data.docsSource,  # Pass the directory path
+            "chunkingMethod": test_data.chunker.chunkingMethod
         },
         "vector_db": {
             "textData": test_data.textData,
@@ -64,21 +79,29 @@ def run_test():
         },
         "llm": {
             "textData": test_data.textData,
-            "queries": test_data.queries
+            "queries": test_data.queries,
+            "llm": test_data.llm.llm
         },
         "prompt": {
             "textData": test_data.textData,
             "queries": test_data.queries,
-            "kg": test_data.kg.to_dict() if test_data.kg else None
+            "kg": test_data.kg.to_dict()
         }
     }
     
     for tool, task_name in TASK_NAMES.items():
         print(f"Sending task to {tool}...")
         tool_specific_data = tool_data_mapping.get(tool, {})
-        task = app.send_task(task_name, args=[json.dumps(tool_specific_data)], queue=tool)
-        results[tool] = task
-        task_states[tool] = 'PENDING'
+        
+        try:
+            task = app.send_task(task_name, args=[json.dumps(tool_specific_data)], queue=tool)
+            results[tool] = task
+            task_states[tool] = 'PENDING'
+            print(f"Successfully sent task to {tool}")
+        except Exception as e:
+            print(f"Error sending task to {tool}: {str(e)}")
+            task_states[tool] = 'ERROR'
+            continue
     
     # Collect and update results
     for tool, task in results.items():
@@ -111,13 +134,60 @@ def run_test():
     return test_data.to_dict(), task_states
 
 
+def wait_for_services():
+    max_retries = 30
+    retry_interval = 5
+    
+    for _ in range(max_retries):
+        try:
+            # Try to connect to RabbitMQ
+            connection = app.connection()
+            connection.connect()
+            connection.release()
+            print("Successfully connected to RabbitMQ")
+            return True
+        except Exception as e:
+            print(f"Waiting for services to be ready... {str(e)}")
+            time.sleep(retry_interval)
+    
+    raise Exception("Services failed to become ready")
+
+
+def wait_for_rabbitmq():
+    """Wait for RabbitMQ to be ready and ensure queues are declared."""
+    print("Waiting for RabbitMQ...")
+    max_retries = 30
+    retry_interval = 2
+    
+    for i in range(max_retries):
+        try:
+            # Try to connect and declare queues
+            with app.connection_for_write() as conn:
+                channel = conn.channel()
+                for queue_name in TASK_NAMES.keys():
+                    Queue(queue_name, channel=channel, durable=True).declare()
+            print("RabbitMQ is ready!")
+            return True
+        except Exception as e:
+            print(f"Waiting for RabbitMQ... Attempt {i+1}/{max_retries}")
+            time.sleep(retry_interval)
+    
+    raise Exception("RabbitMQ connection failed after maximum retries")
+
+
 if __name__ == "__main__":
-    # Wait for RabbitMQ and other services to be ready
-    time.sleep(10)
+    # Wait for services to be ready
+    wait_for_services()
+    
+    # Wait for RabbitMQ and declare queues
+    wait_for_rabbitmq()
+    
+    # Initialize the database
     init_db()
-
-    # Start autoscaling in a separate thread
-    threading.Thread(target=monitor_and_scale, daemon=True).start()
-
+    
+    # Start the monitoring thread
+    monitor_thread = threading.Thread(target=monitor_and_scale, daemon=True)
+    monitor_thread.start()
+    
     # Run the test
     run_test()
