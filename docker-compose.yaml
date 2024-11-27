@@ -54,7 +54,8 @@ services:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
     volumes:
       - ./gaia/data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    user: root
 
   chunker:
     build:
@@ -97,8 +98,13 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
     environment:
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    networks:
+      - gaia_network
 
   prompt:
     build:
@@ -111,3 +117,10 @@ services:
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
 
+networks:
+  gaia_network:
+    driver: bridge
+
+volumes:
+  huggingface_cache:
+    driver: local

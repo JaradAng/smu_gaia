@@ -1,6 +1,6 @@
-celery==5.2.7
-kombu==5.2.4
-amqp==5.1.1
-pytz==2023.3
+celery>=5.3.0
+kombu>=5.3.0
+amqp>=5.2.0
+pytz>=2024.1
 sqlalchemy
 docker

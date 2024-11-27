@@ -4,6 +4,38 @@ from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 import json
 import psutil
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
+tokenizer = None
+model = None
+
+def initialize_model():
+    """Initialize the model and tokenizer once"""
+    global tokenizer, model
+    if tokenizer is None or model is None:
+        try:
+            logger.info(f"Initializing model {MODEL_NAME}")
+            
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+            model = AutoModelForQuestionAnswering.from_pretrained(MODEL_NAME)
+            
+            if torch.cuda.is_available():
+                model = model.cuda()
+                logger.info("Model moved to GPU")
+            else:
+                logger.info("Running on CPU")
+                
+            logger.info("Model initialization completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error initializing model: {str(e)}")
+            return False
+    return True
 
 
 def process_legal_query(context, question):
@@ -11,19 +43,24 @@ def process_legal_query(context, question):
     Process a legal query using the legal-bert model.
     Returns a dictionary containing the analysis results.
     """
-    # Load the model and tokenizer from Hugging Face
-    model_name = "nlpaueb/legal-bert-base-uncased"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+    global tokenizer, model
+    
+    if not initialize_model():
+        error_msg = "Failed to initialize model"
+        logger.error(error_msg)
+        raise Exception(error_msg)
 
-    # Tokenize input
-    inputs = tokenizer(question, context, return_tensors="pt", truncation=True)
+    try:
+        inputs = tokenizer(question, context, return_tensors="pt", truncation=True)
+        
+        if torch.cuda.is_available():
+            inputs = {k: v.cuda() for k, v in inputs.items()}
 
-    # Start timing the LLM query
-    start_time = time.time()
-    outputs = model(**inputs)
-    end_time = time.time()
-    response_time = end_time - start_time
+        start_time = time.time()
+        with torch.no_grad():
+            outputs = model(**inputs)
+        end_time = time.time()
+        response_time = end_time - start_time
 
     # Extract answer
     answer_start = outputs.start_logits.argmax()

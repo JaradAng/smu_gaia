@@ -16,7 +16,7 @@ RUN chown -R appuser:appuser /app
 
 USER appuser
 
-COPY main.py .
+COPY main.py prompt_generator.py ./
 
 CMD ["celery", "-A", "main", "worker", "-l", "info", "-Q", "prompt"]
 
