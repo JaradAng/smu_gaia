@@ -27,12 +27,24 @@ class LLMConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
+    
+@dataclass
+class LLM:
+    llm: Optional[str] = None
+    llmResult: Optional[str] = None
+
+@dataclass
+class Prompts:
+    zeroShot: Optional[str] = None
+    tagBased: Optional[str] = None
+    reasoning: Optional[str] = None
+    custom: Optional[List[str]] = None
 
 @dataclass
 class ProjectData:
-    id: str = field(default_factory=lambda: str(uuid4()))
     domain: str
     docsSource: str
+    id: str = field(default_factory=lambda: str(uuid4()))
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     

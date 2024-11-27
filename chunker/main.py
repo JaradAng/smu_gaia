@@ -56,7 +56,7 @@ def fixed_size_chunking(text, chunk_size=512):
     Performs fixed-sized chunking on the text.
     :param text: Text that is to be chunked
     :param chunk_size: The fixed chunking size
-    :return: List of strings for each chunk
+    :return: List of strings for each chun
     """
     tokens = word_tokenize(text)
     chunks = [tokens[i:i + chunk_size] for i in

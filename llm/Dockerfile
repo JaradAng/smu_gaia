@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM huggingface/transformers-pytorch-cpu:latest
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN chown -R appuser:appuser /app
 
 USER appuser
 
-COPY main.py .
+COPY main.py legal_llm_analysis.py ./
 
 CMD ["celery", "-A", "main", "worker", "-l", "info", "-Q", "llm"]
 
