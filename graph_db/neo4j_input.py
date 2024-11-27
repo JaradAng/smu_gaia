@@ -12,7 +12,6 @@ class Neo4jTripleImporter:
         """
         Initialize Neo4j connection.
         """
-        logger.info(f"In Neo4j triple importer")
         self.DB_URI = "bolt://neo4j:7687"
         self.DB_USERNAME = "neo4j"
         self.DB_PWD = "gaiaadmin"
@@ -37,7 +36,6 @@ class Neo4jTripleImporter:
 
     def import_triples(self, triples: List[Tuple[str,str,str]]):
 
-        logger.info(f"importing triples into KG")
         def create_relationship(tx, subj, pred, obj):
             # Create nodes and relationship if they don't exist
             query = f"""
@@ -105,11 +103,9 @@ class Neo4jTripleImporter:
 
             # TO DO: Fix perdicate finding algorithm. All predicates show as None. 
             for token in doc:
-                logger.info(f"Token looked at: {token}")
                 # Identify verbs as potential predicates
                 if token.pos_ == "VERB" and not query_elements['predicate']:
                     query_elements['predicate'] = token.lemma_
-                logger.info(f"predicate: {query_elements['predicate']}")
                 # Add constraints dynamically
                 if token.dep_ == "amod" or token.pos_ == "ADJ":
                     query_elements['constraints'].append(token.text)
@@ -129,6 +125,8 @@ class Neo4jTripleImporter:
             predicate = query_elements.get('predicate', '')
             obj = query_elements.get('object', '')
 
+            # TO DO: Figure out how to allow questions that are missing object or predicate
+            # example: Are elephants smart? (causes a NULL pointer exception.)
             # Basic dynamic query generation
             query = """
             CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
@@ -150,6 +148,11 @@ class Neo4jTripleImporter:
             logger.error(f"Failed to generate Neo4j query: {e}")
             return ""
 
+    def create_index(self):
+        with self.driver.session() as session:
+            session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
+        logger.info(f"Index 'entityNameIndex' created.")
+
     def query_knowledge_graph(self, question: str) -> List[Tuple[str, str, str]]:
         """
         Query the Neo4j knowledge graph using a natural language question.
@@ -161,11 +164,9 @@ class Neo4jTripleImporter:
             query_elements = self.process_question(question)
             logger.info(f"Current query elements {query_elements}")
             cypher_query = self.generate_neo4j_query(query_elements)
-            logger.info(f"Current cypher query: {cypher_query}")
 
             results = []
             with self.driver.session() as session:
-                session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
                 result = session.run(
                     cypher_query, 
                     subject=query_elements.get('subject', ''),

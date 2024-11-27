@@ -17,21 +17,42 @@ app = Celery(
 )
 
 def extract_triples(textData: str):
+    # Load spaCy model
     nlp = spacy.load("en_core_web_sm")
+    
+    # Process the entire text
     doc = nlp(textData)
+    
     triples = []
     
-    def get_core_phrase(token):
-        """
-        Extract the core phrase for a subject or object by excluding determiners and
-        prepositional modifiers while keeping essential descriptors.
-        """
-        logger.info("IN GET CORE PHRASE FUNCTION")
-        # Start with the subtree of the token
-        words = [t for t in token.subtree if t.dep_ not in {"det", "prep", "punct"}]
-        # Join the words to form a clean phrase
-        return " ".join([t.text for t in words]).lower()
+    # Store potential antecedents
+    last_noun_phrase = None
 
+    def get_comprehensive_noun_phrase(token):
+        """
+        Extract a comprehensive noun phrase, preserving contextual information
+        """
+        # If token is a pronoun, try to use the last known noun phrase
+        if token.pos_ == "PRON" and last_noun_phrase:
+            return last_noun_phrase
+        
+        # Collect all words in the token's subtree
+        words = [t for t in token.subtree]
+        
+        # Focus on words that contribute meaningful information
+        meaningful_words = [
+            t.text for t in words 
+            if t.pos_ in {"NOUN", "PROPN", "ADJ"} or 
+               t.dep_ in {"compound", "amod", "nn"}
+        ]
+        
+        # If meaningful words exist, join them
+        if meaningful_words:
+            phrase = " ".join(meaningful_words)
+            return phrase.lower().strip()
+        
+        # Fallback to the token's text
+        return token.text.lower().strip()
 
     for sent in doc.sents:
         logger.info(f"Sentence we are analyzing: {sent}")
@@ -62,10 +83,13 @@ def extract_triples(textData: str):
 
                 # If we have both subject and object, add the triple
                 if subj and obj:
-                    logger.info("IF SUBJ AND OBJ FUNCTION")
-                    # Extract core phrases for subject and object
-                    subj_phrase = get_core_phrase(subj)
-                    obj_phrase = get_core_phrase(obj)
+                    # Extract comprehensive phrases for subject and object
+                    subj_phrase = get_comprehensive_noun_phrase(subj)
+                    obj_phrase = get_comprehensive_noun_phrase(obj)
+
+                    # Update last known noun phrase
+                    if subj.pos_ in {"NOUN", "PROPN"}:
+                        last_noun_phrase = subj_phrase
 
                     # Use the lemma of the predicate for consistency
                     predicate = token.lemma_.lower()
@@ -107,6 +131,7 @@ def graph_db_task(data):
             "ner": ["spacy"]
         }
 
+        importer.create_index()
         for query in queries:
             logger.info("IN QUERY FUNCTION")
             kg_triples = importer.query_knowledge_graph(query)
