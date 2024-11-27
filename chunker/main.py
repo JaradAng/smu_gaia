@@ -131,23 +131,25 @@ def chunker_task(json_data):
 
     # Loading text data from path
     text_data = load_files(path)
-
-    # Determine which chunker was selected
-    if desired_chunker == "fixed_size":
-        logger.info("Chunker chosen: Fixed Size!")
-        chunks = fixed_size_chunking(text_data)
-    elif desired_chunker == "sentence_based":
-        logger.info("Chunker chosen: Sentence Based!")
-        chunks = sentence_based_chunking(text_data)
-    elif desired_chunker == "semantic":
-        logger.info("Chunker chosen: Semantic!")
-        chunks = semantic_chunking(text_data)
-    else:
-        logger.info("No chunker chosen! Defaulting to Fixed Size!")
-        chunks = fixed_size_chunking(text_data)
-
-    logger.info(f"Chunker produced: {chunks}")
-    return chunks
+    
+    # Process each text document separately
+    all_chunks = []
+    for text in text_data:
+        if desired_chunker == "fixed_size":
+            logger.info("Chunker chosen: Fixed Size!")
+            chunks = fixed_size_chunking(text)  # Now passing a single string
+        elif desired_chunker == "sentence_based":
+            logger.info("Chunker chosen: Sentence Based!")
+            chunks = sentence_based_chunking(text)
+        elif desired_chunker == "semantic":
+            logger.info("Chunker chosen: Semantic!")
+            chunks = semantic_chunking(text)
+        else:
+            logger.info("No chunker chosen! Defaulting to Fixed Size!")
+            chunks = fixed_size_chunking(text)
+        all_chunks.extend(chunks)
+    
+    return all_chunks
 
 
 def send_chunking_task(json_data):

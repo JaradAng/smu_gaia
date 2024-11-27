@@ -2,7 +2,7 @@ import random
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 import json
-from gaia.utils.data_models import KG, Chunker, LLM, Prompts, ProjectData
+from gaia.utils.data_models import KnowledgeGraph, ChunkerConfig, LLM, Prompts, ProjectData
 
 
 def generate_zero_shot_prompt(project_data: ProjectData) -> str:

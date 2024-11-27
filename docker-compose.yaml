@@ -46,6 +46,8 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    volumes:
+      - ./chunker/data:/app/data
 
   vector_db:
     build:
@@ -82,13 +84,12 @@ services:
     environment:
       - TRANSFORMERS_CACHE=/root/.cache/huggingface
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
-    networks:
-      - gaia_network
+  
 
   prompt:
     build:
-      context: ./prompt
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: prompt/Dockerfile
     image: prompt
     depends_on:
       rabbitmq:
