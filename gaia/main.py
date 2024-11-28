@@ -16,7 +16,6 @@ def calculate_desired_containers(queue_length):
 
     MAX_TASKS_PER_CONTAINER = 5
     return (queue_length // MAX_TASKS_PER_CONTAINER)
-    return (queue_length // MAX_TASKS_PER_CONTAINER)
 
 
 def monitor_and_scale():
