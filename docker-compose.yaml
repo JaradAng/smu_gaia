@@ -91,8 +91,6 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
-    extra_hosts:
-    - "host.docker.internal:host-gateway"
 
   llm:
     build:

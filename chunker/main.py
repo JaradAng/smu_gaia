@@ -5,7 +5,7 @@ from nltk import word_tokenize, pos_tag
 from nltk.chunk import RegexpParser
 import logging
 import os
-import json
+from sentence_transformers import SentenceTransformer
 
 # Initialize logger
 logging.basicConfig(level=logging.INFO)
@@ -114,32 +114,42 @@ def semantic_chunking(text):
 def chunker_task(json_data):
     """
     Task for chunking a document.
-    Expects a JSON string containing textData and optional chunkingMethod.
+    Simulates chunking a document into parts (chunks).
+    :param json_data: JSON file that holds the values for agents.
+    :return: Chunked data
     """
-    logger.info(f"Chunker received: {data}")
-    
+    logger.info(f"Chunker received: {json_data}")
+
+    path = "."
+    desired_chunker = "fixed_size"
+    # Extracting from JSON
     try:
-        data_dict = json.loads(data)
-        text = data_dict.get("textData", "")
-        method = data_dict.get("chunkingMethod", "paragraph")
-        
-        # Simulated chunking (replace with actual chunking logic)
-        chunks = [text[i:i+100] for i in range(0, len(text), 100)]
-        
-        result = {
-            "chunkingMethod": method,
-            "chunks": chunks
-        }
-        
-        logger.info(f"Chunker produced: {result}")
-        return json.dumps(result)
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON input: {str(e)}")
-        return json.dumps({"error": f"Invalid JSON input: {str(e)}"})
-    except Exception as e:
-        logger.error(f"Error processing chunks: {str(e)}")
-        return json.dumps({"error": f"Error processing chunks: {str(e)}"})
+        path = json_data['docsSource']  # Path of data
+        desired_chunker = json_data['chunkingMethod']  # Chunking method
+    except TypeError:
+        logger.warning("TypeError: Data was not JSON")
+
+    # Loading text data from path
+    text_data = load_files(path)
+    
+    # Process each text document separately
+    all_chunks = []
+    for text in text_data:
+        if desired_chunker == "fixed_size":
+            logger.info("Chunker chosen: Fixed Size!")
+            chunks = fixed_size_chunking(text)  # Now passing a single string
+        elif desired_chunker == "sentence_based":
+            logger.info("Chunker chosen: Sentence Based!")
+            chunks = sentence_based_chunking(text)
+        elif desired_chunker == "semantic":
+            logger.info("Chunker chosen: Semantic!")
+            chunks = semantic_chunking(text)
+        else:
+            logger.info("No chunker chosen! Defaulting to Fixed Size!")
+            chunks = fixed_size_chunking(text)
+        all_chunks.extend(chunks)
+    
+    return all_chunks
 
 
 def send_chunking_task(json_data):
