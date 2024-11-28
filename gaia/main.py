@@ -40,8 +40,8 @@ def run_test():
     test_data = ProjectData(
         domain="test_domain",
         docsSource="/app/data",  # Path to the directory containing test_doc.txt
-        textData="Test document 1. Test document 2. Test document 3.",  # Simple sentences for NLTK
-        queries=["What are the main topics?"],
+        textData="African elephants are remarkable species that inhabit the savannas and forests of Africa. They are known for their impressive size and intelligence. Their herds are led by experienced matriarchs who guide younger elephants. These intelligent mammals can withstand long droughts by migrating to areas with water sources. Their thick skin requires constant moisture, so they often soak in mud or find water to hydrate and protect themselves from the harsh sun.",  # Simple sentences for NLTK
+        queries=["What are the main topics?", "Are there any animals mentioned?", "Do elephants like rain?"],
         status="processing"
     )
     

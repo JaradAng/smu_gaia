@@ -55,7 +55,6 @@ def extract_triples(textData: str):
         return token.text.lower().strip()
 
     for sent in doc.sents:
-        logger.info(f"Sentence we are analyzing: {sent}")
         for token in sent:
             # Include both regular verbs and participles
             if token.pos_ in ["VERB", "AUX"] or (token.pos_ == "ADJ" and token.dep_ == "acomp"):
@@ -96,7 +95,6 @@ def extract_triples(textData: str):
 
                     # Create the triple
                     triple = (subj_phrase, predicate, obj_phrase)
-                    logger.info(f"Triple found in extract_triple: {triple}")
                     triples.append(triple)
 
     return triples
@@ -114,14 +112,12 @@ def graph_db_task(data):
         queries = data_dict.get("queries", [])
 
         logger.info(f"Graph DB received: {data_dict}")
-        logger.info(f"text data: {text}")
-        logger.info(f"queries: {queries}")
 
-        # 1. Extract entities and relationships
+        # Extract entities and relationships
         triples_list = extract_triples(text)
-        logger.info(f"Here are the triples I found: {triples_list}")
+        logger.info(f"Triples extracted: {triples_list}")
 
-        # 2. Create knowledge graph triples and # 3. Store in graph database
+        # Create knowledge graph triples and Store in graph database
         importer = neo()
         importer.import_triples(triples_list)
 
@@ -133,7 +129,6 @@ def graph_db_task(data):
 
         importer.create_index()
         for query in queries:
-            logger.info("IN QUERY FUNCTION")
             kg_triples = importer.query_knowledge_graph(query)
 
             formatted_kg_triples = [f"{subject} - {relation} - {object}" 

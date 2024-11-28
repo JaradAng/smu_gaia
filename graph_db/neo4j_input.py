@@ -36,7 +36,6 @@ class Neo4jTripleImporter:
 
     def import_triples(self, triples: List[Tuple[str,str,str]]):
 
-        logger.info(f"importing triples into KG")
         def create_relationship(tx, subj, pred, obj):
             # Create nodes and relationship if they don't exist
             query = f"""
@@ -117,34 +116,58 @@ class Neo4jTripleImporter:
             logger.error(f"Failed to process question: {e}")
             return {}
 
-    def generate_neo4j_query(self, query_elements: Dict[str, Any]) -> str:
+    def generate_neo4j_query(self, query_elements: Dict[str, Any], question:str) -> str:
         """
         Generate a dynamic Cypher query from extracted elements.
         """
+        nlp = spacy.load("en_core_web_sm")
+
         try:
             subject = query_elements.get('subject', '')
             predicate = query_elements.get('predicate', '')
             obj = query_elements.get('object', '')
 
-            # TO DO: Figure out how to allow questions that are missing object or predicate
-            # example: Are elephants smart? (causes a NULL pointer exception.)
-            # Basic dynamic query generation
-            query = """
-            CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
-            WITH s
-            MATCH (s)-[r]->(o:Entity)
-            WHERE 
-            ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $subject) > 0.6) OR
-            ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $object) > 0.6) OR
-            ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $subject) > 0.6) OR
-            ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $object) > 0.6)
-            RETURN 
-            s.name AS subject, 
-            type(r) AS predicate, 
-            o.name AS object
-            LIMIT 10
+            logger.info(f"In generate function, this is subject: {subject} and this is object:{obj}")
+            if subject and obj:
+                query = """
+                CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
+                WITH s
+                MATCH (s)-[r]->(o:Entity)
+                WHERE 
+                ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $subject) > 0.6) OR
+                ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $object) > 0.6) OR
+                ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $subject) > 0.6) OR
+                ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $object) > 0.6)
+                RETURN 
+                s.name AS subject, 
+                type(r) AS predicate, 
+                o.name AS object
+                LIMIT 10
+                        """
+                return query
+            else:
+                keywords = [
+                    token.lemma_ for token in nlp(question.lower()) 
+                    if token.pos_ in {"NOUN", "PROPN", "ADJ"} 
+                    and len(token.lemma_) > 2  # Ignore very short words
+                ]
+                keywords = list(set(keywords))
+                if len(keywords) != 0:
+                    query="""
+                    UNWIND $keywords AS keyword
+                    MATCH (s:Entity)-[r]->(o:Entity)
+                    WHERE 
+                        apoc.text.sorensenDiceSimilarity(s.name, keyword) > $threshold OR
+                        apoc.text.sorensenDiceSimilarity(o.name, keyword) > $threshold
+                    RETURN DISTINCT 
+                        s.name AS subject, 
+                        type(r) AS predicate, 
+                        o.name AS object
+                    LIMIT 10
                     """
-            return query
+                    return query
+                else:
+                    return ""
         except Exception as e:
             logger.error(f"Failed to generate Neo4j query: {e}")
             return ""
@@ -157,14 +180,12 @@ class Neo4jTripleImporter:
     def query_knowledge_graph(self, question: str) -> List[Tuple[str, str, str]]:
         """
         Query the Neo4j knowledge graph using a natural language question.
-
         :param question: The natural language question.
-        :param use_dependency_parsing: Whether to use dependency parsing for extraction.
         """
         try:
             query_elements = self.process_question(question)
             logger.info(f"Current query elements {query_elements}")
-            cypher_query = self.generate_neo4j_query(query_elements)
+            cypher_query = self.generate_neo4j_query(query_elements, question)
 
             results = []
             with self.driver.session() as session:
