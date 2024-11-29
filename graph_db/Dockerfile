@@ -1,22 +1,23 @@
-FROM python:3.9-slim
+FROM python:3.9-alpine
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# Install build dependencies
+RUN apk add --no-cache \
+    build-base \
     gcc \
-    g++ \
-    build-essential 
+    musl-dev \
+    python3-dev
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m spacy download en_core_web_sm
-RUN useradd --create-home --shell /bin/bash appuser
-
+# Create non-root user
+RUN adduser -D appuser
 RUN chown -R appuser:appuser /app
-
 USER appuser
 
 COPY main.py .
 COPY neo4j_input.py .
 
-CMD ["celery", "-A", "main", "worker", "-l", "info", "-Q", "graph_db"]
+CMD ["celery", "-A", "main", "worker", "--concurrency=2", "-l", "info", "-Q", "graph_db"]
 
