@@ -1,6 +1,13 @@
-FROM python:3.9-slim
+FROM python:3.9-alpine
 
 WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache \
+    build-base \
+    gcc \
+    musl-dev \
+    python3-dev
 
 # Copy gaia utils module
 COPY gaia/utils /app/gaia/utils
@@ -9,12 +16,11 @@ COPY gaia/utils /app/gaia/utils
 COPY prompt/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd --create-home --shell /bin/bash appuser
-
+# Create non-root user
+RUN adduser -D appuser
 RUN chown -R appuser:appuser /app
-
 USER appuser
 
 COPY prompt/main.py prompt/prompt_generator.py ./
 
-CMD ["celery", "-A", "main", "worker", "-l", "info", "-Q", "prompt"]
+CMD ["celery", "-A", "main", "worker", "--concurrency=2", "-l", "info", "-Q", "prompt"]
