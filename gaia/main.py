@@ -16,6 +16,7 @@ def calculate_desired_containers(queue_length):
 
     MAX_TASKS_PER_CONTAINER = 5
     return (queue_length // MAX_TASKS_PER_CONTAINER)
+    return (queue_length // MAX_TASKS_PER_CONTAINER)
 
 
 def monitor_and_scale():
@@ -29,7 +30,6 @@ def monitor_and_scale():
                 image_name = os.environ.get("DOCKER_IMAGE_LLM", "llm")
                 autoscaler.scale_containers(desired_containers, image_name)
         time.sleep(10)  # Adjust the sleep time as needed
-
 
 
 # In main.py, modify run_test()

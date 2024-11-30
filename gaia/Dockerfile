@@ -18,6 +18,7 @@ RUN apk add --no-cache \
     rust \
     cargo
 
+# Copy and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -1,0 +1,49 @@
+{
+    "id": "proj_2024_03_30_001",
+    "domain": "healthcare_research",
+    "docsSource": "pubmed_articles",
+    "queries": [
+      "What are the latest treatments for type 2 diabetes?",
+      "How does metformin affect blood glucose levels?",
+      "What are the common side effects of diabetes medications?"
+    ],
+    "textData": "Type 2 diabetes is a chronic condition that affects the way your body metabolizes sugar (glucose). With type 2 diabetes, your body either resists the effects of insulin — a hormone that regulates the movement of sugar into your cells — or doesn't produce enough insulin to maintain normal glucose levels...",
+    "embedding": "text-embedding-ada-002",
+    "vectorDB": "pinecone",
+    "ragText": "Based on the retrieved information, type 2 diabetes treatments include lifestyle modifications such as diet and exercise, along with medications like metformin, sulfonylureas, and newer drug classes such as GLP-1 receptor agonists...",
+    "kg": {
+      "kgTriples": [
+        "Type2Diabetes,affects,glucose_metabolism",
+        "Metformin,treats,Type2Diabetes",
+        "Type2Diabetes,requires,insulin_regulation",
+        "Insulin,regulates,blood_glucose",
+        "GLP1_agonists,improve,glucose_control"
+      ],
+      "ner": [
+        "DISEASE: Type 2 diabetes",
+        "MEDICATION: metformin",
+        "CHEMICAL: glucose",
+        "PROTEIN: insulin",
+        "DRUG_CLASS: GLP-1 receptor agonists"
+      ]
+    },
+    "chunker": {
+      "chunkingMethod": "recursive_text_splitter",
+      "chunks": [
+        "Type 2 diabetes is a chronic condition that affects the way your body metabolizes sugar (glucose).",
+        "With type 2 diabetes, your body either resists the effects of insulin or doesn't produce enough insulin.",
+        "Maintaining normal glucose levels is essential for managing type 2 diabetes."
+      ]
+    },
+    "llm": {
+      "llm": "gpt-4",
+      "llmResult": "Based on the analysis of recent medical literature, the management of type 2 diabetes involves a multi-faceted approach. First-line treatment typically includes metformin, which works by improving insulin sensitivity and reducing glucose production in the liver..."
+    },
+    "vectorDBLoaded": true,
+    "similarityIndices": {
+      "cosine": 0.87,
+      "euclidean": 0.92,
+      "manhattan": 0.85
+    },
+    "generatedResponse": "According to current medical research, the treatment of type 2 diabetes involves both medication and lifestyle changes. Metformin remains the primary first-line medication, working to improve insulin sensitivity and reduce glucose production. Recent studies have shown promising results with GLP-1 receptor agonists, which not only help control blood sugar but may also contribute to weight loss. Regular monitoring of blood glucose levels and appropriate medication adjustment are essential for optimal disease management."
+  }

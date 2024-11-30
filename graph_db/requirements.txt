@@ -2,3 +2,11 @@ celery
 kombu
 amqp>
 pytz
+celery==5.2.7
+kombu==5.2.4
+amqp==5.1.1
+pytz==2023.3
+spacy==3.8.2
+neo4j==5.0.0
+rdflib==7.0.0
+rdflib-neo4j==1.0.0
