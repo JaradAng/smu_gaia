@@ -4,12 +4,14 @@ from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 import json
 import psutil
 import os
+from pathlib import Path
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
+MODEL_PATH = os.environ.get('MODEL_PATH', '/app/models')
 tokenizer = None
 model = None
 
@@ -20,8 +22,24 @@ def initialize_model():
         try:
             logger.info(f"Initializing model {MODEL_NAME}")
             
-            tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-            model = AutoModelForQuestionAnswering.from_pretrained(MODEL_NAME)
+            # Create model directory if it doesn't exist
+            model_dir = Path(MODEL_PATH) / MODEL_NAME.split('/')[-1]
+            model_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Check if model exists locally
+            if (model_dir / 'config.json').exists():
+                logger.info(f"Loading model from local path: {model_dir}")
+                tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+                model = AutoModelForQuestionAnswering.from_pretrained(str(model_dir))
+            else:
+                logger.info(f"Downloading model from Hugging Face")
+                tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+                model = AutoModelForQuestionAnswering.from_pretrained(MODEL_NAME)
+                
+                # Save model locally
+                logger.info(f"Saving model to {model_dir}")
+                tokenizer.save_pretrained(str(model_dir))
+                model.save_pretrained(str(model_dir))
             
             if torch.cuda.is_available():
                 model = model.cuda()

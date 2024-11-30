@@ -102,8 +102,10 @@ services:
         condition: service_healthy
     volumes:
       - huggingface_cache:/root/.cache/huggingface
+      - shared_models:/app/models
     environment:
       - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - MODEL_PATH=/app/models
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
   
 
@@ -124,4 +126,6 @@ networks:
 
 volumes:
   huggingface_cache:
+    driver: local
+  shared_models:
     driver: local

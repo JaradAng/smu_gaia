@@ -34,101 +34,95 @@ def monitor_and_scale():
 
 # In main.py, modify run_test()
 def run_test():
-    print("Starting GAIA communication test...")
+    print("Starting GAIA processing...")
     
-    # Create test ProjectData object with minimal test data
+    # Create initial ProjectData object with test_doc path
     test_data = ProjectData(
-        domain="test_domain",
-        docsSource="/app/data",  # Path to the directory containing test_doc.txt
-        textData="African elephants are remarkable species that inhabit the savannas and forests of Africa. They are known for their impressive size and intelligence. Their herds are led by experienced matriarchs who guide younger elephants. These intelligent mammals can withstand long droughts by migrating to areas with water sources. Their thick skin requires constant moisture, so they often soak in mud or find water to hydrate and protect themselves from the harsh sun.",  # Simple sentences for NLTK
-        queries=["What are the main topics?", "Are there any animals mentioned?", "Do elephants like rain?"],
+        domain="fantasy",
+        docsSource="/app/chunker/data",  \
+        queries=["What is the main quest of Thorin Ironfist?"],
         status="processing"
     )
     
-    # Initialize nested objects with test data
-    test_data.kg = KnowledgeGraph(
-        kgTriples=["entity1 - relation1 - entity2"],
-        ner=["Test"]
-    )
+    # Initialize nested objects
+    test_data.kg = KnowledgeGraph(kgTriples=[], ner=[])
     test_data.chunker = ChunkerConfig(
-        chunkingMethod="fixed_size",
+        chunkingMethod="sentence_based",
         chunks=[]
     )
-    test_data.llm = LLMConfig(
-        llm="test_model"
-    )
+    test_data.llm = LLMConfig(llm="bert-base-uncased")
     
     results = {}
     task_states = {}
     
-    # Send relevant parts of the ProjectData to each tool
-    tool_data_mapping = {
-        "chunker": {
-            "docsSource": test_data.docsSource,  # Pass the directory path
+    # Send tasks to all tools
+    try:
+        # Start chunker task
+        chunker_data = {
+            "docsSource": test_data.docsSource,
             "chunkingMethod": test_data.chunker.chunkingMethod
-        },
-        "vector_db": {
-            "textData": test_data.textData,
-            "embedding": test_data.embedding,
-            "vectorDB": test_data.vectorDB
-        },
-        "graph_db": {
-            "textData": test_data.textData,
-            "queries": test_data.queries
-        },
-        "llm": {
-            "textData": test_data.textData,
-            "queries": test_data.queries,
-            "llm": test_data.llm.llm
-        },
-        "prompt": {
-            "textData": test_data.textData,
-            "queries": test_data.queries,
-            "kg": test_data.kg.to_dict()
         }
-    }
-    
-    for tool, task_name in TASK_NAMES.items():
-        print(f"Sending task to {tool}...")
-        tool_specific_data = tool_data_mapping.get(tool, {})
+        print(f"Sending data to chunker: {json.dumps(chunker_data, indent=2)}")
+        results["chunker"] = app.send_task(TASK_NAMES["chunker"], args=[json.dumps(chunker_data)], queue="chunker")
+        task_states["chunker"] = 'PENDING'
         
-        try:
-            task = app.send_task(task_name, args=[json.dumps(tool_specific_data)], queue=tool)
-            results[tool] = task
-            task_states[tool] = 'PENDING'
-            print(f"Successfully sent task to {tool}")
-        except Exception as e:
-            print(f"Error sending task to {tool}: {str(e)}")
-            task_states[tool] = 'ERROR'
-            continue
-    
-    # Collect and update results
-    for tool, task in results.items():
-        try:
-            task_states[tool] = 'PROCESSING'
-            result = task.get(timeout=60)
-            task_states[tool] = 'COMPLETED'
-            
-            # Update the ProjectData object with the results
-            if tool == "chunker":
-                test_data.chunker.chunks = json.loads(result).get("chunks", [])
-            elif tool == "vector_db":
-                test_data.vectorDBLoaded = json.loads(result).get("loaded", False)
-            elif tool == "graph_db":
-                kg_result = json.loads(result)
-                test_data.kg.kgTriples = kg_result.get("kgTriples", [])
-                test_data.kg.ner = kg_result.get("ner", [])
-            elif tool == "llm":
-                test_data.llm.llmResult = json.loads(result).get("llmResult", "")
-            
-            results[tool] = result
-            save_result(tool, json.dumps(tool_specific_data), result)
-            
-        except Exception as e:
-            task_states[tool] = 'FAILED'
-            print(f"Error getting result from {tool}: {str(e)}")
-            results[tool] = f"Error: {str(e)}"
-            save_result(tool, json.dumps(tool_specific_data), f"Error: {str(e)}")
+        # Start graph_db task (will wait for chunks in its implementation)
+        graph_data = {
+            "queries": test_data.queries,
+            "waitForChunks": True  # Signal that this task needs chunker results
+        }
+        print(f"Sending data to graph_db: {json.dumps(graph_data, indent=2)}")
+        results["graph_db"] = app.send_task(TASK_NAMES["graph_db"], args=[json.dumps(graph_data)], queue="graph_db")
+        task_states["graph_db"] = 'PENDING'
+        
+        # Start prompt task (will wait for graph_db in its implementation)
+        prompt_data = {
+            "queries": test_data.queries,
+            "waitForKG": True  # Signal that this task needs graph_db results
+        }
+        print(f"Sending data to prompt: {json.dumps(prompt_data, indent=2)}")
+        results["prompt"] = app.send_task(TASK_NAMES["prompt"], args=[json.dumps(prompt_data)], queue="prompt")
+        task_states["prompt"] = 'PENDING'
+        
+        # Start llm task (will wait for prompts in its implementation)
+        llm_data = {
+            "queries": test_data.queries,
+            "llm": test_data.llm.llm,
+            "waitForPrompts": True  # Signal that this task needs prompt results
+        }
+        print(f"Sending data to llm: {json.dumps(llm_data, indent=2)}")
+        results["llm"] = app.send_task(TASK_NAMES["llm"], args=[json.dumps(llm_data)], queue="llm")
+        task_states["llm"] = 'PENDING'
+        
+        # Collect results as they complete
+        for tool, task in results.items():
+            try:
+                task_states[tool] = 'PROCESSING'
+                result = task.get(timeout=60)
+                result_dict = json.loads(result)
+                task_states[tool] = 'COMPLETED'
+                print(f"Received result from {tool}: {json.dumps(result_dict, indent=2)}")
+                
+                # Update ProjectData based on tool results
+                if tool == "chunker":
+                    test_data.chunker.chunks = result_dict.get("chunks", [])
+                elif tool == "graph_db":
+                    test_data.kg.kgTriples = result_dict.get("kgTriples", [])
+                    test_data.kg.ner = result_dict.get("ner", [])
+                elif tool == "prompt":
+                    test_data.prompts = result_dict
+                elif tool == "llm":
+                    test_data.llm.llmResult = result_dict.get("llmResult", "")
+                
+                save_result(tool, json.dumps(llm_data), result)
+                
+            except Exception as e:
+                task_states[tool] = 'FAILED'
+                print(f"Error processing {tool}: {str(e)}")
+                save_result(tool, json.dumps(llm_data), f"Error: {str(e)}")
+                
+    except Exception as e:
+        print(f"Error initiating tasks: {str(e)}")
     
     return test_data.to_dict(), task_states
 
