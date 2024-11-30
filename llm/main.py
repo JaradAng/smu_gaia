@@ -4,6 +4,7 @@ import logging
 import os
 import json
 from legal_llm_analysis import process_legal_query
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -18,44 +19,42 @@ app = Celery(
 
 @app.task(name="llm")
 def llm_task(data):
-    """
-    Task for LLM processing.
-    Expects a JSON string containing textData and queries.
-    """
-    logger.info(f"LLM received: {data}")
-    
     try:
         data_dict = json.loads(data)
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
+        model_name = data_dict.get("llm", "bert-base-uncased")
         
-        # Process each query using the legal LLM
-        responses = []
-        for query in queries:
-            response = f"Processed response for query: {query}"
-            responses.append(response)
-        #     result = process_legal_query(context=text, question=query)
-        #     responses.append(result["response"]["raw_text"])
+        # Only download the model if we're actually going to use it
+        if text and queries:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+            
+            responses = []
+            for query in queries:
+                # Tokenize input
+                inputs = tokenizer(query, text, return_tensors="pt", truncation=True, max_length=512)
+                
+                # Get model outputs
+                outputs = model(**inputs)
+                
+                # Process outputs to get answer
+                answer_start = outputs.start_logits.argmax()
+                answer_end = outputs.end_logits.argmax()
+                answer = tokenizer.decode(inputs["input_ids"][0][answer_start:answer_end+1])
+                
+                responses.append(answer)
+        else:
+            # If no text/queries, just return dummy response
+            responses = [f"No inference needed for query: {q}" for q in queries]
         
         result = {
-            "llm": "gpt-4",  # or whatever LLM is being used
+            "llm": model_name,
             "llmResult": " | ".join(responses)
-            # "llm": "legal-bert",
-            # "llmResult": " | ".join(responses),
-            # "metrics": {
-            #     "response_times": [result["performance_metrics"]["response_time"]],
-            #     "token_counts": [result["performance_metrics"]["token_count"]],
-            #     "cpu_usage": result["resource_usage"]["cpu_usage_percent"],
-            #     "memory_usage": result["resource_usage"]["memory_usage_percent"]
-            # }
         }
         
-        logger.info(f"LLM produced: {result}")
         return json.dumps(result)
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON input: {str(e)}")
-        return json.dumps({"error": f"Invalid JSON input: {str(e)}"})
     except Exception as e:
         logger.error(f"Error in LLM processing: {str(e)}")
         return json.dumps({"error": f"Error in LLM processing: {str(e)}"})
