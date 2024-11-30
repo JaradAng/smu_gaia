@@ -11,13 +11,13 @@ app = Celery(
     backend="db+sqlite:///data/results.sqlite",
 )
 
-# Setup routing keys
+# Setup routing keys and ensure queues are declared
 app.conf.task_queues = (
-    Queue("chunker", routing_key="chunker"),
-    Queue("vector_db", routing_key="vector_db"),
-    Queue("graph_db", routing_key="graph_db"),
-    Queue("llm", routing_key="llm"),
-    Queue("prompt", routing_key="prompt"),
+    Queue("chunker", routing_key="chunker", durable=True),
+    Queue("vector_db", routing_key="vector_db", durable=True),
+    Queue("graph_db", routing_key="graph_db", durable=True),
+    Queue("llm", routing_key="llm", durable=True),
+    Queue("prompt", routing_key="prompt", durable=True),
 )
 
 # Define task names for each queue
@@ -28,6 +28,16 @@ TASK_NAMES = {
     "llm": "llm",
     "prompt": "prompt",
 }
+
+# Configure task settings
+app.conf.update(
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    task_time_limit=300,  # 5 minutes timeout
+    broker_connection_retry=True,
+    broker_connection_retry_on_startup=True,
+    broker_connection_max_retries=10,
+)
 
 
 @app.task(name="chunker")

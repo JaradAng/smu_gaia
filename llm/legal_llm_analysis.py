@@ -4,74 +4,113 @@ from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 import json
 import psutil
 import os
+from pathlib import Path
+import logging
 
-# Load the model and tokenizer from Hugging Face
-model_name = "nlpaueb/legal-bert-base-uncased"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def run_legal_llm_analysis(question):
-    # Tokenize input (just the question in this case)
-    inputs = tokenizer(question, return_tensors="pt", truncation=True)
-    start_time = time.time()
+MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
+MODEL_PATH = os.environ.get('MODEL_PATH', '/app/models')
+tokenizer = None
+model = None
 
-    # Perform inference with the model
-    outputs = model(**inputs)
-    end_time = time.time()
+def initialize_model():
+    """Initialize the model and tokenizer once"""
+    global tokenizer, model
+    if tokenizer is None or model is None:
+        try:
+            logger.info(f"Initializing model {MODEL_NAME}")
+            
+            # Create model directory if it doesn't exist
+            model_dir = Path(MODEL_PATH) / MODEL_NAME.split('/')[-1]
+            model_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Check if model exists locally
+            if (model_dir / 'config.json').exists():
+                logger.info(f"Loading model from local path: {model_dir}")
+                tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+                model = AutoModelForQuestionAnswering.from_pretrained(str(model_dir))
+            else:
+                logger.info(f"Downloading model from Hugging Face")
+                tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+                model = AutoModelForQuestionAnswering.from_pretrained(MODEL_NAME)
+                
+                # Save model locally
+                logger.info(f"Saving model to {model_dir}")
+                tokenizer.save_pretrained(str(model_dir))
+                model.save_pretrained(str(model_dir))
+            
+            if torch.cuda.is_available():
+                model = model.cuda()
+                logger.info("Model moved to GPU")
+            else:
+                logger.info("Running on CPU")
+                
+            logger.info("Model initialization completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error initializing model: {str(e)}")
+            return False
+    return True
 
-    # Calculate response time
-    response_time = end_time - start_time
+def process_legal_query(context, question):
+    """
+    Process a legal query using the legal-bert model.
+    Returns a dictionary containing the analysis results.
+    """
+    global tokenizer, model
+    
+    if not initialize_model():
+        error_msg = "Failed to initialize model"
+        logger.error(error_msg)
+        raise Exception(error_msg)
 
-    # Extract answer from the model's output
-    answer_start = outputs.start_logits.argmax()
-    answer_end = outputs.end_logits.argmax() + 1
-    answer = tokenizer.convert_tokens_to_string(
-        tokenizer.convert_ids_to_tokens(inputs['input_ids'][0][answer_start:answer_end])
-    )
+    try:
+        inputs = tokenizer(question, context, return_tensors="pt", truncation=True)
+        
+        if torch.cuda.is_available():
+            inputs = {k: v.cuda() for k, v in inputs.items()}
 
-    # Gather token usage and system resource usage
-    token_count = len(inputs['input_ids'][0])
-    cpu_usage = psutil.cpu_percent(interval=1)
-    memory_usage = psutil.virtual_memory().percent
+        start_time = time.time()
+        with torch.no_grad():
+            outputs = model(**inputs)
+        end_time = time.time()
+        response_time = end_time - start_time
 
-    # Assemble the output JSON
-    output_json = {
-        "test_id": "LEGAL_LLM_TEST_001",
-        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
-        "model_info": {
-            "model_name": model_name,
-            "model_version": "v1.0",
-            "provider": "Hugging Face"
-        },
-        "input_processing": {
-            "question_text": question,
-            "token_count": token_count
-        },
-        "response": {
-            "raw_text": answer,
-            "detected_language": "en"
-        },
-        "performance_metrics": {
-            "response_time": response_time,
-            "token_count": token_count
-        },
-        "resource_usage": {
-            "cpu_usage_percent": cpu_usage,
-            "memory_usage_percent": memory_usage
-        },
-        "metadata": {
-            "environment": "test",
-            "tags": ["legal", "labor law", "remote work"]
+        answer_start = outputs.start_logits.argmax()
+        answer_end = outputs.end_logits.argmax() + 1
+        answer = tokenizer.convert_tokens_to_string(
+            tokenizer.convert_ids_to_tokens(inputs['input_ids'][0][answer_start:answer_end])
+        )
+
+        token_count = len(inputs['input_ids'][0])
+        cpu_usage = psutil.cpu_percent(interval=1)
+        memory_usage = psutil.virtual_memory().percent
+
+        return {
+            "test_id": "LEGAL_LLM_TEST_001",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "model_info": {
+                "model_name": MODEL_NAME,
+                "model_version": "v1.0",
+                "provider": "Hugging Face"
+            },
+            "response": {
+                "raw_text": answer,
+                "detected_language": "en"
+            },
+            "performance_metrics": {
+                "response_time": response_time,
+                "token_count": token_count
+            },
+            "resource_usage": {
+                "cpu_usage_percent": cpu_usage,
+                "memory_usage_percent": memory_usage
+            }
         }
-    }
-
-    # Save the output to a JSON file
-    json_file_name = "Legal_LLM_Analysis_Output.json"
-    with open(json_file_name, 'w') as json_file:
-        json.dump(output_json, json_file, indent=4)
-
-    print(f"Response: {answer}")
-    print(f"Response time: {response_time} seconds")
-    print(f"Token usage: {token_count}")
-
-    return output_json
+        
+    except Exception as e:
+        logger.error(f"Error processing query: {str(e)}")
+        raise

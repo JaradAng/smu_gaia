@@ -2,6 +2,9 @@ from celery import Celery
 from celery.bin import worker as celery_worker
 import logging
 import os
+import json
+from legal_llm_analysis import process_legal_query
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -16,17 +19,45 @@ app = Celery(
 
 @app.task(name="llm")
 def llm_task(data):
-    """
-    Task for processing data using a Language Learning Model (LLM).
-    Simulates generating a response based on input data.
-    """
-    logger.info(f"LLM received: {data}")
-
-    # Simulated for testing
-    result = f"LLM generated response for: {data}"
-
-    logger.info(f"LLM produced: {result}")
-    return result
+    try:
+        data_dict = json.loads(data)
+        text = data_dict.get("textData", "")
+        queries = data_dict.get("queries", [])
+        model_name = data_dict.get("llm", "bert-base-uncased")
+        
+        # Only download the model if we're actually going to use it
+        if text and queries:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+            
+            responses = []
+            for query in queries:
+                # Tokenize input
+                inputs = tokenizer(query, text, return_tensors="pt", truncation=True, max_length=512)
+                
+                # Get model outputs
+                outputs = model(**inputs)
+                
+                # Process outputs to get answer
+                answer_start = outputs.start_logits.argmax()
+                answer_end = outputs.end_logits.argmax()
+                answer = tokenizer.decode(inputs["input_ids"][0][answer_start:answer_end+1])
+                
+                responses.append(answer)
+        else:
+            # If no text/queries, just return dummy response
+            responses = [f"No inference needed for query: {q}" for q in queries]
+        
+        result = {
+            "llm": model_name,
+            "llmResult": " | ".join(responses)
+        }
+        
+        return json.dumps(result)
+        
+    except Exception as e:
+        logger.error(f"Error in LLM processing: {str(e)}")
+        return json.dumps({"error": f"Error in LLM processing: {str(e)}"})
 
 
 def send_llm_task(data):

@@ -1,15 +1,27 @@
-FROM python:3.9-slim
+FROM python:3.9-alpine
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libsqlite3-dev
+# Install build dependencies and sqlite
+RUN apk add --no-cache \
+    build-base \
+    gcc \
+    musl-dev \
+    python3-dev \
+    sqlite \
+    sqlite-dev \
+    libffi-dev \
+    docker-cli \
+    docker-py \
+    py3-pip \
+    openssl-dev \
+    rust \
+    cargo
 
+# Copy and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install docker
 
 COPY . .
-
-# EXPOSE 8000  # adjust if we need to go out of docker
 
 CMD ["python", "main.py"]
