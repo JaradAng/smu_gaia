@@ -3,7 +3,7 @@ import logging
 
 class ContainerManager:
     def __init__(self):
-        self.client = docker.from_env()
+        self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
         self.logger = logging.getLogger(__name__)
 
     def start_container(self, image_name, env_vars=None, command=None):
