@@ -66,29 +66,29 @@ def run_test():
         results["chunker"] = app.send_task(TASK_NAMES["chunker"], args=[json.dumps(chunker_data)], queue="chunker")
         task_states["chunker"] = 'PENDING'
         
-        # Start graph_db task (will wait for chunks in its implementation)
+        
         graph_data = {
             "queries": test_data.queries,
-            "waitForChunks": True  # Signal that this task needs chunker results
+            "waitForChunks": True  
         }
         print(f"Sending data to graph_db: {json.dumps(graph_data, indent=2)}")
         results["graph_db"] = app.send_task(TASK_NAMES["graph_db"], args=[json.dumps(graph_data)], queue="graph_db")
         task_states["graph_db"] = 'PENDING'
         
-        # Start prompt task (will wait for graph_db in its implementation)
+        
         prompt_data = {
             "queries": test_data.queries,
-            "waitForKG": True  # Signal that this task needs graph_db results
+            "waitForKG": True  
         }
         print(f"Sending data to prompt: {json.dumps(prompt_data, indent=2)}")
         results["prompt"] = app.send_task(TASK_NAMES["prompt"], args=[json.dumps(prompt_data)], queue="prompt")
         task_states["prompt"] = 'PENDING'
         
-        # Start llm task (will wait for prompts in its implementation)
+        
         llm_data = {
             "queries": test_data.queries,
             "llm": test_data.llm.llm,
-            "waitForPrompts": True  # Signal that this task needs prompt results
+            "waitForPrompts": True  
         }
         print(f"Sending data to llm: {json.dumps(llm_data, indent=2)}")
         results["llm"] = app.send_task(TASK_NAMES["llm"], args=[json.dumps(llm_data)], queue="llm")
