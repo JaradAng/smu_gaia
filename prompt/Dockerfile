@@ -14,7 +14,7 @@ COPY gaia/utils /app/gaia/utils
 
 # Copy service files
 COPY prompt/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Create non-root user
 RUN adduser -D appuser
