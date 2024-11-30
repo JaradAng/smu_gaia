@@ -15,9 +15,6 @@ RUN python -m spacy download en_core_web_sm
 RUN adduser -D appuser
 RUN chown -R appuser:appuser /app
 USER appuser
+COPY main.py neo4j_input.py .
 
-COPY main.py .
-COPY neo4j_input.py .
-
-CMD ["celery", "-A", "main", "worker", "--concurrency=2", "-l", "info", "-Q", "graph_db"]
-
+CMD ["celery", "-A", "main", "worker", "--concurrency=2", "-l", "info", "-Q", "graph_db", "--max-memory-per-child", "51200", "--max-tasks-per-child", "250"]

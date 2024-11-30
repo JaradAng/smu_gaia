@@ -1,3 +1,4 @@
+import json
 from celery import Celery
 from celery.bin import worker as celery_worker
 import nltk
@@ -124,8 +125,9 @@ def chunker_task(json_data):
     desired_chunker = "fixed_size"
     # Extracting from JSON
     try:
-        path = json_data['docsSource']  # Path of data
-        desired_chunker = json_data['chunkingMethod']  # Chunking method
+        data_dict = json.loads(json_data)
+        path = data_dict.get("docsSource", "")
+        desired_chunker = data_dict.get("chunkingMethod", [])
     except TypeError:
         logger.warning("TypeError: Data was not JSON")
 
