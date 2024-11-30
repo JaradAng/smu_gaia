@@ -11,7 +11,12 @@ RUN apk add --no-cache \
     sqlite \
     sqlite-dev \
     libffi-dev \
-    docker-cli
+    docker-cli \
+    docker-py \
+    py3-pip \
+    openssl-dev \
+    rust \
+    cargo
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
