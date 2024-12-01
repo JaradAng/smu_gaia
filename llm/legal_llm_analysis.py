@@ -15,15 +15,15 @@ MODEL_PATH = os.environ.get('MODEL_PATH', '/app/models')
 tokenizer = None
 model = None
 
-def initialize_model():
-    """Initialize the model and tokenizer once"""
+def initialize_model(model_name):
+    """Initialize the model and tokenizer for a given model name"""
     global tokenizer, model
-    if tokenizer is None or model is None:
+    if tokenizer is None or model is None or model_name != MODEL_NAME:
         try:
-            logger.info(f"Initializing model {MODEL_NAME}")
+            logger.info(f"Initializing model {model_name}")
             
             # Create model directory if it doesn't exist
-            model_dir = Path(MODEL_PATH) / MODEL_NAME.split('/')[-1]
+            model_dir = Path(MODEL_PATH) / model_name.split('/')[-1]
             model_dir.mkdir(parents=True, exist_ok=True)
             
             # Check if model exists locally
@@ -33,8 +33,8 @@ def initialize_model():
                 model = AutoModelForQuestionAnswering.from_pretrained(str(model_dir))
             else:
                 logger.info(f"Downloading model from Hugging Face")
-                tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-                model = AutoModelForQuestionAnswering.from_pretrained(MODEL_NAME)
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                model = AutoModelForQuestionAnswering.from_pretrained(model_name)
                 
                 # Save model locally
                 logger.info(f"Saving model to {model_dir}")
@@ -55,14 +55,14 @@ def initialize_model():
             return False
     return True
 
-def process_legal_query(context, question):
+def process_query(context, question, model_name=MODEL_NAME):
     """
-    Process a legal query using the legal-bert model.
+    Process a query using the specified model.
     Returns a dictionary containing the analysis results.
     """
     global tokenizer, model
     
-    if not initialize_model():
+    if not initialize_model(model_name):
         error_msg = "Failed to initialize model"
         logger.error(error_msg)
         raise Exception(error_msg)
@@ -90,10 +90,10 @@ def process_legal_query(context, question):
         memory_usage = psutil.virtual_memory().percent
 
         return {
-            "test_id": "LEGAL_LLM_TEST_001",
+            "test_id": "LLM_TEST_001",
             "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
             "model_info": {
-                "model_name": MODEL_NAME,
+                "model_name": model_name,
                 "model_version": "v1.0",
                 "provider": "Hugging Face"
             },

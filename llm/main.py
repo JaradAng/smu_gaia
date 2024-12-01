@@ -17,6 +17,27 @@ app = Celery(
 )
 
 
+def perform_analysis(text, queries, model_name):
+    """
+    Perform analysis on the given text and queries using process_query.
+    Returns a list of formatted responses.
+    """
+    responses = []
+    for query in queries:
+        # Use process_query to get the analysis results
+        analysis_result = process_query(text, query, model_name)
+        
+        # Extract the necessary information from the analysis result
+        answer = analysis_result["response"]["raw_text"]
+        response_time = analysis_result["performance_metrics"]["response_time"]
+        token_count = analysis_result["performance_metrics"]["token_count"]
+
+        # Append the answer and metrics to the responses
+        responses.append(f"Answer: {answer}, Response Time: {response_time}s, Token Count: {token_count}")
+    
+    return responses
+
+
 @app.task(name="llm")
 def llm_task(data):
     try:
@@ -24,37 +45,17 @@ def llm_task(data):
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
         model_name = data_dict.get("llm", "bert-base-uncased")
-        
-        # Only download the model if we're actually going to use it
+
         if text and queries:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-            
-            responses = []
-            for query in queries:
-                # Tokenize input
-                inputs = tokenizer(query, text, return_tensors="pt", truncation=True, max_length=512)
-                
-                # Get model outputs
-                outputs = model(**inputs)
-                
-                # Process outputs to get answer
-                answer_start = outputs.start_logits.argmax()
-                answer_end = outputs.end_logits.argmax()
-                answer = tokenizer.decode(inputs["input_ids"][0][answer_start:answer_end+1])
-                
-                responses.append(answer)
+            responses = perform_analysis(text, queries, model_name)
         else:
             # If no text/queries, just return dummy response
             responses = [f"No inference needed for query: {q}" for q in queries]
-        
-        result = {
-            "llm": model_name,
-            "llmResult": " | ".join(responses)
-        }
-        
+
+        result = {"llm": model_name, "llmResult": " | ".join(responses)}
+
         return json.dumps(result)
-        
+
     except Exception as e:
         logger.error(f"Error in LLM processing: {str(e)}")
         return json.dumps({"error": f"Error in LLM processing: {str(e)}"})
