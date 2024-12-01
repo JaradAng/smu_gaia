@@ -3,7 +3,7 @@ from celery.bin import worker as celery_worker
 import logging
 import os
 import json
-from legal_llm_analysis import process_legal_query
+from legal_llm_analysis import process_query
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
 
