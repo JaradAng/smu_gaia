@@ -50,15 +50,52 @@ services:
       - ./chunker/data:/app/data
 
   vector_db:
-    build:
-      context: ./vector_db
-      dockerfile: Dockerfile
-    image: vector_db
+    container_name: milvus
+    # build: 
+    #   context: ./vector_db
+    #   dockerfile: Dockerfile
+    image: milvusdb/milvus:v2.3.17
     depends_on:
+      # etcd:
+      #   condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    security_opt:
+    - seccomp:unconfined
     environment:
+      - MINIO_ADDRESS=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - ETCD_ENDPOINTS=http://etcd:2379
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    ports:
+      - "19530:19530"  # gRPC port for Milvus
+      - "19121:19121"  # HTTP port for admin tools (optional)
+    volumes:
+        - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19121"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: ["milvus", "run", "standalone"]
+        
+  etcd:
+    container_name: etcd
+    image: quay.io/coreos/etcd:v3.5.0
+    command: etcd --advertise-client-urls=http://0.0.0.0:2379 --listen-client-urls=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+
+  minio:
+    container_name: minio
+    image: minio/minio:latest
+    command: server /data
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
 
   graph_db:
     build:
@@ -107,4 +144,6 @@ volumes:
   huggingface_cache:
     driver: local
   shared_models:
+    driver: local
+  milvus_data:
     driver: local
