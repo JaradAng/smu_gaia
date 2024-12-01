@@ -31,7 +31,6 @@ def monitor_and_scale():
         time.sleep(10)  # Adjust the sleep time as needed
 
 
-
 # In main.py, modify run_test()
 def run_test():
     print("Starting GAIA processing...")

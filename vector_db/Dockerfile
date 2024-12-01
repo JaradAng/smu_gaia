@@ -20,4 +20,3 @@ USER appuser
 COPY main.py .
 
 CMD ["celery", "-A", "main", "worker", "--concurrency=2", "-l", "info", "-Q", "vector_db"]
-
