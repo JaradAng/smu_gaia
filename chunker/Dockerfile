@@ -24,7 +24,7 @@ WORKDIR /app
 # Copy only necessary files from builder
 COPY --from=builder /opt/venv /opt/venv
 COPY main.py .
-COPY data/ /app/data
+COPY data/ /app/chunker/data
 
 # Set up path and non-root user
 ENV PATH="/opt/venv/bin:$PATH"
