@@ -100,26 +100,62 @@ def extract_triples(textData: str):
     return triples
 
 
+def load_files(directory):
+    """
+    Loads in text files in specified directory.
+    :param directory: Directory holding files
+    :return: Combined text from all files
+    """
+    if not os.path.exists(directory):
+        logger.warning(f"Directory {directory} does not exist")
+        return ""
+        
+    texts = []
+    for filename in os.listdir(directory):
+        if filename.endswith(".txt"):
+            try:
+                with open(os.path.join(directory, filename), 'r', encoding='utf-8') as f:
+                    texts.append(f.read())
+            except Exception as e:
+                logger.error(f"Error reading file {filename}: {str(e)}")
+                continue
+    
+    # Combine texts with spacing
+    full_text = ""
+    for text in texts:
+        full_text += text + "\n\n"
+    return full_text.strip()  # Remove trailing newlines
+
+
 @app.task(name="graph_db")
-def graph_db_task(data):
+def graph_db_task(json_data):
     """
-    Task for Graph DB operations.
-    Expects a JSON string containing textData and queries.
+    Task for processing text data and creating a knowledge graph.
+    :param json_data: JSON containing docsSource and queries
+    :return: JSON with graph data
     """
+    logger.info(f"Graph DB received: {json_data}")
     try:
-        data_dict = json.loads(data)
-        text = data_dict.get("textData", "")
-        queries = data_dict.get("queries", [])
-
-        logger.info(f"Graph DB received: {data_dict}")
-
-        # Extract entities and relationships
-        triples_list = extract_triples(text)
-        logger.info(f"Triples extracted: {triples_list}")
+        # Parse JSON data
+        data = json.loads(json_data)
+        docs_source = data.get("docsSource", "/shared_data")  # Default to /shared_data if not specified
+        
+        # Load and process text
+        logger.info(f"Loading text from directory: {docs_source}")
+        text_data = load_files(docs_source)
+        
+        if not text_data:
+            logger.warning("No text data provided or found in files")
+            
+        queries = data.get("queries", [])
+        
+        # Extract triples from text
+        triples = extract_triples(text_data)
+        logger.info(f"Triples extracted: {triples}")
 
         # Create knowledge graph triples and Store in graph database
         importer = neo()
-        importer.import_triples(triples_list)
+        importer.import_triples(triples)
 
         # Initializing result structure
         result = {

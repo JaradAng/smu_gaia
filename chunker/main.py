@@ -18,8 +18,11 @@ app = Celery(
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
 )
 
-nltk.download('punkt_tab')
-
+# Download required NLTK data
+nltk.download('punkt')
+nltk.download('punkt_tab') 
+nltk.download('averaged_perceptron_tagger_eng')  # For POS tagging
+print('NLTK packages downloaded!')
 
 def load_files(directory):
     """
@@ -81,35 +84,48 @@ def sentence_based_chunking(text, num_sentences=5):
     return embed
 
 
+# def semantic_chunking(text):
+#     """
+#     Function for handling semantic chunking.
+#     :param text: Text that is to be chunked
+#     :return: Embedded chunks
+#     """
+#     # Tokenize the text
+#     tokens = word_tokenize(text)
+#     # Perform part-of-speech tagging
+#     pos_tags = pos_tag(tokens)
+
+#     # Define a grammar for chunking
+#     chunk_grammar = r"""
+#         NP: {<DT|JJ|NN.*>+}          # Chunk sequences of DT, JJ, NN
+#         VP: {<VB.*><NP|PP|CLAUSE>+$} # Chunk verbs and their arguments
+#         PP: {<IN><NP>}               # Chunk prepositions followed by NP
+#         CLAUSE: {<NP><VP>}           # Chunk NP, VP
+#     """
+
+#     # Create a chunk parser
+#     chunk_parser = RegexpParser(chunk_grammar)
+
+#     # Perform chunking
+#     chunks = chunk_parser.parse(pos_tags)
+
+#     embed = embed_chunks(chunks)
+#     return embed
 def semantic_chunking(text):
-    """
-    Function for handling semantic chunking.
-    :param text: Text that is to be chunked
-    :return: Embedded chunks
-    """
-    # Tokenize the text
     tokens = word_tokenize(text)
-
-    # Perform part-of-speech tagging
     pos_tags = pos_tag(tokens)
-
-    # Define a grammar for chunking
+    
     chunk_grammar = r"""
-        NP: {<DT|JJ|NN.*>+}          # Chunk sequences of DT, JJ, NN
-        VP: {<VB.*><NP|PP|CLAUSE>+$} # Chunk verbs and their arguments
-        PP: {<IN><NP>}               # Chunk prepositions followed by NP
-        CLAUSE: {<NP><VP>}           # Chunk NP, VP
+        NP: {<DT|JJ|NN.*>+}
+        VP: {<VB.*><NP|PP|CLAUSE>+$}
+        PP: {<IN><NP>}
+        CLAUSE: {<NP><VP>}
     """
-
-    # Create a chunk parser
     chunk_parser = RegexpParser(chunk_grammar)
-
-    # Perform chunking
     chunks = chunk_parser.parse(pos_tags)
-
-    embed = embed_chunks(chunks)
-    return embed
-
+    chunk_strings = [' '.join([token for token, tag in chunk.leaves()])
+                    for chunk in chunks if hasattr(chunk, 'label')]
+    return embed_chunks(chunk_strings)
 
 @app.task(name="chunker")
 def chunker_task(json_data):
@@ -119,39 +135,33 @@ def chunker_task(json_data):
     :param json_data: JSON file that holds the values for agents.
     :return: Chunked data
     """
-    logger.info(f"Chunker received: {json_data}")
-
-    path = "."
-    desired_chunker = "fixed_size"
-    # Extracting from JSON
+    logger.info("Starting chunking task.")
     try:
-        data_dict = json.loads(json_data)
-        path = data_dict.get("docsSource", "")
-        desired_chunker = data_dict.get("chunkingMethod", [])
-    except TypeError:
-        logger.warning("TypeError: Data was not JSON")
-
-    # Loading text data from path
-    text_data = load_files(path)
-    
-    # Process each text document separately
-    all_chunks = []
-    for text in text_data:
-        if desired_chunker == "fixed_size":
-            logger.info("Chunker chosen: Fixed Size!")
-            chunks = fixed_size_chunking(text)  # Now passing a single string
-        elif desired_chunker == "sentence_based":
-            logger.info("Chunker chosen: Sentence Based!")
-            chunks = sentence_based_chunking(text)
-        elif desired_chunker == "semantic":
-            logger.info("Chunker chosen: Semantic!")
-            chunks = semantic_chunking(text)
-        else:
-            logger.info("No chunker chosen! Defaulting to Fixed Size!")
-            chunks = fixed_size_chunking(text)
-        all_chunks.extend(chunks)
-    
-    return all_chunks
+        # Parse JSON data
+        data = json.loads(json_data)
+        path = data.get("docsSource", "/shared_data")  # Default to /shared_data if not specified
+        
+        # Load files from data directory
+        texts = load_files(path)
+        
+        # Process each text
+        all_chunks = []
+        for text in texts:
+            # Perform chunking based on method specified
+            if data.get('method') == 'fixed':
+                chunks = fixed_size_chunking(text, data.get('chunk_size', 512))
+            elif data.get('method') == 'sentence':
+                chunks = sentence_based_chunking(text, data.get('num_sentences', 5))
+            else:
+                chunks = semantic_chunking(text)
+                pass
+            all_chunks.extend(chunks)
+        
+        return {"status": "success", "chunks": all_chunks}
+        
+    except Exception as e:
+        logger.error(f"Error in chunking task: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 
 def send_chunking_task(json_data):

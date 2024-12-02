@@ -11,9 +11,13 @@ RUN apk add --no-cache \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m spacy download en_core_web_sm
+
+# Create shared data directory
+RUN mkdir /shared_data
+
 # Create non-root user
 RUN adduser -D appuser
-RUN chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app /shared_data
 USER appuser
 COPY main.py neo4j_input.py .
 

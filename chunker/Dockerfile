@@ -24,12 +24,15 @@ WORKDIR /app
 # Copy only necessary files from builder
 COPY --from=builder /opt/venv /opt/venv
 COPY main.py .
-COPY data/ /app/chunker/data
+
+# Create shared data directory and copy data into it
+RUN mkdir -p /shared_data
+COPY data/ /shared_data/
 
 # Set up path and non-root user
 ENV PATH="/opt/venv/bin:$PATH"
 RUN useradd --create-home --shell /bin/bash appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app /shared_data
 
 # Install minimal runtime dependencies if needed
 RUN apt-get update && \

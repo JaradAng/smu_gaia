@@ -68,7 +68,7 @@ services:
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
     volumes:
-      - ./chunker/data:/app/data
+      - shared_data:/shared_data
 
   vector_db:
     build:
@@ -91,6 +91,8 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    volumes:
+      - shared_data:/shared_data
 
   llm:
     build:
@@ -128,4 +130,6 @@ volumes:
   huggingface_cache:
     driver: local
   shared_models:
+    driver: local
+  shared_data:
     driver: local
