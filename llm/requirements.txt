@@ -7,3 +7,4 @@ transformers
 psutil
 requests
 huggingface_hub
+redis

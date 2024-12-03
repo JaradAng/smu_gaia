@@ -8,7 +8,7 @@ import logging
 from tasks import TASK_NAMES, app, wait_for_rabbitmq  # Import wait_for_rabbitmq from tasks.py
 from autoscaler import Autoscaler
 from utils.monitoring import get_queue_length
-from utils.db import init_db, save_result
+from utils.db import save_result  # Remove init_db from import
 from utils.data_models import ProjectData, KnowledgeGraph, ChunkerConfig, LLMConfig
 
 # Configure logging
@@ -56,6 +56,24 @@ def run_test():
             "chunkingMethod": "sentence_based"
         }
         
+        logger.info(f"Sending data to chunker: {json.dumps(chunker_data, indent=2)}")
+        results["chunker"] = app.send_task(
+            TASK_NAMES["chunker"],
+            args=[json.dumps(chunker_data)],
+            queue="chunker"
+        )
+        task_states["chunker"] = 'PENDING'
+        
+        # Add this block to handle chunker result
+        try:
+            chunker_result = results["chunker"].get(timeout=240)
+            if isinstance(chunker_result, dict) and chunker_result.get('status') == 'success':
+                task_states["chunker"] = 'COMPLETED'
+                logger.info("Chunker task completed successfully")
+        except Exception as e:
+            logger.error(f"Error processing chunker: {str(e)}")
+            task_states["chunker"] = 'FAILED'
+        
         graph_data = {
             "docsSource": test_data.docsSource,
             "queries": test_data.queries
@@ -67,14 +85,6 @@ def run_test():
         }
         
         # Send tasks to respective queues
-        logger.info(f"Sending data to chunker: {json.dumps(chunker_data, indent=2)}")
-        results["chunker"] = app.send_task(
-            TASK_NAMES["chunker"],
-            args=[json.dumps(chunker_data)],
-            queue="chunker"
-        )
-        task_states["chunker"] = 'PENDING'
-        
         logger.info(f"Sending data to graph_db: {json.dumps(graph_data, indent=2)}")
         results["graph_db"] = app.send_task(
             TASK_NAMES["graph_db"],
@@ -156,9 +166,8 @@ if __name__ == "__main__":
     # Wait for RabbitMQ and declare queues
     wait_for_rabbitmq()
     
-    # Initialize the database
-    init_db()
-    logger.info("Database initialized")
+    # Remove the init_db() call since we're using Redis now
+    logger.info("Redis connection initialized")
     
     # Start the monitoring thread
     monitor_thread = threading.Thread(target=monitor_and_scale, daemon=True)

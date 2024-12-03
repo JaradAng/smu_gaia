@@ -7,6 +7,7 @@ from nltk.chunk import RegexpParser
 import logging
 import os
 from sentence_transformers import SentenceTransformer
+import numpy as np
 
 # Initialize logger
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 app = Celery(
     "gaia",
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
+    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
 )
 
 # Download required NLTK data
@@ -44,15 +46,16 @@ def embed_chunks(chunks):
     """
     Embeds the chunks using a SentenceTransformer model.
     :param chunks: Chunked text that is to be embedded
-    :return: List of Tensors
+    :return: List of lists (converted from numpy arrays)
     """
     # Load pre-trained Sentence-BERT model
     model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
     # Generate embeddings for each chunk
     embeddings = model.encode(chunks)
-
-    return embeddings
+    
+    # Convert numpy arrays to lists before returning
+    return embeddings.tolist()  # Convert to Python list
 
 
 def fixed_size_chunking(text, chunk_size=512):
@@ -154,10 +157,17 @@ def chunker_task(json_data):
                 chunks = sentence_based_chunking(text, data.get('num_sentences', 5))
             else:
                 chunks = semantic_chunking(text)
-                pass
+            
+            # Ensure chunks are JSON serializable
+            if isinstance(chunks, np.ndarray):
+                chunks = chunks.tolist()
             all_chunks.extend(chunks)
         
-        return {"status": "success", "chunks": all_chunks}
+        # Ensure the final result is JSON serializable
+        return {
+            "status": "success", 
+            "chunks": all_chunks
+        }
         
     except Exception as e:
         logger.error(f"Error in chunking task: {str(e)}")

@@ -2,5 +2,6 @@ celery
 kombu
 amqp
 pytz
-sqlalchemy
 docker
+redis
+numpy

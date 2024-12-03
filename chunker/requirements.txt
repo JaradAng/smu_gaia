@@ -1,3 +1,5 @@
 celery
 nltk==3.9.1
 sentence_transformers==3.2.1
+redis
+numpy

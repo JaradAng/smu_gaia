@@ -2,3 +2,4 @@ celery
 kombu
 amqp
 pytz
+redis

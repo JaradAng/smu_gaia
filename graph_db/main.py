@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 app = Celery(
     "gaia",
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
+    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
 )
 
 def extract_triples(textData: str):

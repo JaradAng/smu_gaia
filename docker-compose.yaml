@@ -50,8 +50,11 @@ services:
         condition: service_started
       prompt:
         condition: service_started
+      redis:
+        condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./gaia/data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock:rw
@@ -67,6 +70,7 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - shared_data:/shared_data
 
@@ -80,6 +84,7 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
   graph_db:
     build:
@@ -91,6 +96,7 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - shared_data:/shared_data
 
@@ -109,6 +115,7 @@ services:
       - TRANSFORMERS_CACHE=/root/.cache/huggingface
       - MODEL_PATH=/app/models
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
   
 
   prompt:
@@ -121,6 +128,17 @@ services:
         condition: service_healthy
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   gaia_network:

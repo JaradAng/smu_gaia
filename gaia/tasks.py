@@ -6,11 +6,12 @@ from container_manager import ContainerManager
 import os
 import time
 import logging
+from utils.serialization import custom_dumps
 
 app = Celery(
     "gaia",
     broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
-    backend="db+sqlite:///data/results.sqlite",
+    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
 )
 
 # Setup routing keys and ensure queues are declared
@@ -48,6 +49,9 @@ app.conf.update(
     broker_pool_limit=10,
     worker_prefetch_multiplier=1,
     task_track_started=True,
+    result_backend_transport_options={
+        'serializer': custom_dumps
+    },
     broker_transport_options={
         'confirm_publish': True,
         'max_retries': 3,

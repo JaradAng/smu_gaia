@@ -1,23 +1,21 @@
-import sqlite3
+import redis
 import os
+import json
+from datetime import datetime
 
-def init_db():
-    os.makedirs('data', exist_ok=True)
-    conn = sqlite3.connect('data/results.sqlite')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS task_results
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  tool TEXT,
-                  input TEXT,
-                  output TEXT,
-                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    conn.close()
+redis_client = redis.Redis(
+    host=os.environ.get('REDIS_HOST', 'redis'),
+    port=int(os.environ.get('REDIS_PORT', 6379)),
+    db=0
+)
 
 def save_result(tool, input_data, output):
-    conn = sqlite3.connect('data/results.sqlite')
-    c = conn.cursor()
-    c.execute("INSERT INTO task_results (tool, input, output) VALUES (?, ?, ?)",
-              (tool, input_data, output))
-    conn.commit()
-    conn.close()
+    result = {
+        'tool': tool,
+        'input': input_data,
+        'output': output,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    # Store results with a unique key
+    key = f"result:{tool}:{datetime.utcnow().timestamp()}"
+    redis_client.set(key, json.dumps(result))

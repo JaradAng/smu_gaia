@@ -18,9 +18,20 @@ app = Celery(
 
 
 @app.task(name="llm")
-def llm_task(data):
+def llm_task(data, wait_for_prompts=False):
+    """
+    Process text using LLM.
+    
+    Args:
+        data: Input data containing text and queries
+        wait_for_prompts: Flag indicating whether to wait for prompts (optional)
+    """
     try:
-        data_dict = json.loads(data)
+        # Log the wait_for_prompts parameter if needed
+        if wait_for_prompts:
+            logger.info("Waiting for prompts completion.")
+            
+        data_dict = json.loads(data) if isinstance(data, str) else data
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
         model_name = data_dict.get("llm", "bert-base-uncased")
