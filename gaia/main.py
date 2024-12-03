@@ -132,7 +132,18 @@ def run_test():
             task_states["chunker"] = 'FAILED'
             # Continue execution as graph_db is independent
         
-        # Continue with other tasks
+        # Wait for graph_db to complete
+        try:
+            graph_db_result = results["graph_db"].get(timeout=240)
+            graph_db_dict = json.loads(graph_db_result)
+            test_data.kg.kgTriples = graph_db_dict.get("kgTriples", [])
+            test_data.kg.ner = graph_db_dict.get("ner", [])
+            task_states["graph_db"] = 'COMPLETED'
+        except Exception as e:
+            print(f"Error processing graph_db response: {str(e)}")
+            task_states["graph_db"] = 'FAILED'
+        
+        # Send to prompt
         prompt_data = {
             "queries": test_data.queries,
             "waitForKG": True  

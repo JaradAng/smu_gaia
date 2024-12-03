@@ -8,7 +8,10 @@ from gaia.utils.data_models import KnowledgeGraph, ChunkerConfig, LLM, Prompts, 
 def generate_zero_shot_prompt(project_data: ProjectData) -> str:
     prompt = f"Based on the following data:\n"
     prompt += f"Text: {project_data.ragText}\n"
-    prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    if project_data.kg.kgTriples:
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    else:
+        prompt += "No relevant knowledge graph triples found.\n"
     prompt += f"What is {project_data.queries[0] if project_data.queries else 'the main topic'}"
     return prompt
 
@@ -18,7 +21,10 @@ def generate_tag_based_prompt(project_data: ProjectData) -> str:
     prompt = f"{selected_tags[0]} Answer the following question based on the provided information.\n"
     prompt += f"{selected_tags[1]} Domain: {project_data.domain}\n"
     prompt += f"Text: {project_data.ragText}\n"
-    prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    if project_data.kg.kgTriples:
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    else:
+        prompt += "No relevant knowledge graph triples found.\n"
     prompt += f"{selected_tags[2]} {project_data.queries[0] if project_data.queries else 'What is the main topic?'}"
     return prompt
 
@@ -26,7 +32,10 @@ def generate_reasoning_prompt(project_data: ProjectData) -> str:
     prompt = "<instruction> Answer the following question based on the provided information.\n"
     prompt += f"<context> Domain: {project_data.domain}\n"
     prompt += f"Text: {project_data.ragText}\n"
-    prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    if project_data.kg.kgTriples:
+        prompt += f"Knowledge Graph Triples: {', '.join(project_data.kg.kgTriples)}\n"
+    else:
+        prompt += "No relevant knowledge graph triples found.\n"
     prompt += f"<input> {project_data.queries[0] if project_data.queries else 'What is the main topic?'}\n"
     prompt += "<reasoning> Explain your thought process step by step.\n"
     prompt += "<thinking> Break down the problem and analyze it systematically."
