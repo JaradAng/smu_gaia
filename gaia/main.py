@@ -4,251 +4,152 @@ import os
 import time
 import threading
 import json
-from tasks import TASK_NAMES, app  # Importing TASK_NAMES and app from tasks.py
+import logging
+from tasks import TASK_NAMES, app, wait_for_rabbitmq  # Import wait_for_rabbitmq from tasks.py
 from autoscaler import Autoscaler
 from utils.monitoring import get_queue_length
 from utils.db import init_db, save_result
 from utils.data_models import ProjectData, KnowledgeGraph, ChunkerConfig, LLMConfig
-from kombu import Queue
-from celery import Celery
 
-# Configure Celery app
-app = Celery(
-    "gaia",
-    broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@rabbitmq:5672//"),
-    broker_connection_retry=True,
-    broker_connection_retry_on_startup=True,
-    broker_connection_max_retries=10,
-    broker_heartbeat=60,
-    broker_pool_limit=10,
-    broker_transport_options={
-        'confirm_publish': True,
-        'max_retries': 3,
-        'interval_start': 0,
-        'interval_step': 0.2,
-        'interval_max': 0.5,
-    }
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-# Configure task routes
-app.conf.task_routes = {
-    'chunker': {'queue': 'chunker'},
-    'graph_db': {'queue': 'graph_db'},
-    'llm': {'queue': 'llm'}
-}
-
-# Configure task settings
-app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-    task_acks_late=True,
-    worker_prefetch_multiplier=1,
-    task_track_started=True
-)
-
-def calculate_desired_containers(queue_length):
-
-    MAX_TASKS_PER_CONTAINER = 5
-    return (queue_length // MAX_TASKS_PER_CONTAINER)
-
+logger = logging.getLogger(__name__)
 
 def monitor_and_scale():
+    """Monitor queue lengths and scale workers accordingly."""
     autoscaler = Autoscaler()
     while True:
-        for tool, task_name in TASK_NAMES.items():
-            # Assuming only 'llm' tasks require autoscaling
-            if tool == "llm":
-                queue_length = get_queue_length(tool)
-                desired_containers = calculate_desired_containers(queue_length)
-                image_name = os.environ.get("DOCKER_IMAGE_LLM", "llm")
-                autoscaler.scale_containers(desired_containers, image_name)
-        time.sleep(10)  # Adjust the sleep time as needed
+        for queue_name in ["llm", "chunker"]:  # Add more queues as needed
+            queue_length = get_queue_length(queue_name)
+            logger.info(f"Queue {queue_name} length: {queue_length}")
+            autoscaler.scale_containers(queue_length, queue_name)
+        time.sleep(30)  # Check every 30 seconds
 
+def wait_for_services():
+    """Wait for required services to be ready."""
+    logger.info("Waiting for services to be ready...")
+    # Add any additional service checks here
+    pass
 
-# In main.py, modify run_test()
 def run_test():
-    """Run test with the specified configuration."""
+    """Run a test workflow through the system."""
+    logger.info("Starting test workflow...")
+    
+    # Initialize test data with required arguments
+    test_data = ProjectData(
+        domain="test",
+        docsSource="/shared_data"
+    )
+    test_data.queries = ["What is the main quest of Thorin Ironfist?"]
+    
+    # Track task states and results
     results = {}
     task_states = {}
     
     try:
-        # Initialize test data
-        test_data = ProjectData(
-            domain="fantasy",
-            docsSource="/shared_data",  
-            queries=["What is the main quest of Thorin Ironfist?"],
-            status="processing"
-        )
-        
-        # Initialize nested objects
-        test_data.kg = KnowledgeGraph(kgTriples=[], ner=[])
-        test_data.chunker = ChunkerConfig(
-            chunkingMethod="sentence_based",
-            chunks=[]
-        )
-        test_data.llm = LLMConfig(llm="bert-base-uncased")
-        
-        # Send to chunker
+        # Prepare data for each task
         chunker_data = {
             "docsSource": test_data.docsSource,
-            "chunkingMethod": test_data.chunker.chunkingMethod
+            "chunkingMethod": "sentence_based"
         }
-        print(f"Sending data to chunker: {json.dumps(chunker_data, indent=2)}")
-        results["chunker"] = app.send_task(TASK_NAMES["chunker"], args=[json.dumps(chunker_data)], queue="chunker")
-        task_states["chunker"] = 'PENDING'
         
-        # Send to graph_db (independent of chunker)
         graph_data = {
-            "docsSource": test_data.docsSource,  # Using same source as chunker
+            "docsSource": test_data.docsSource,
             "queries": test_data.queries
         }
-        print(f"Sending data to graph_db: {json.dumps(graph_data, indent=2)}")
+        
+        prompt_data = {
+            "queries": test_data.queries,
+            "waitForKG": True
+        }
+        
+        # Send tasks to respective queues
+        logger.info(f"Sending data to chunker: {json.dumps(chunker_data, indent=2)}")
+        results["chunker"] = app.send_task(
+            TASK_NAMES["chunker"],
+            args=[json.dumps(chunker_data)],
+            queue="chunker"
+        )
+        task_states["chunker"] = 'PENDING'
+        
+        logger.info(f"Sending data to graph_db: {json.dumps(graph_data, indent=2)}")
         results["graph_db"] = app.send_task(
-            TASK_NAMES["graph_db"], 
-            args=[json.dumps(graph_data)], 
-            queue="graph_db",
-            retry=True,
-            retry_policy={
-                'max_retries': 3,
-                'interval_start': 0,
-                'interval_step': 0.2,
-                'interval_max': 0.5,
-            }
+            TASK_NAMES["graph_db"],
+            args=[json.dumps(graph_data)],
+            queue="graph_db"
         )
         task_states["graph_db"] = 'PENDING'
         
-        try:
-            # Process chunker results
-            initial_chunker_result, final_chunker_result = results["chunker"].get(timeout=240)
-            initial_chunker_dict = json.loads(initial_chunker_result)
-            final_chunker_dict = json.loads(final_chunker_result)
-            test_data.chunker.chunks = final_chunker_dict.get("chunks", [])
-            
-        except Exception as e:
-            print(f"Error processing chunker response: {str(e)}")
-            task_states["chunker"] = 'FAILED'
-            # Continue execution as graph_db is independent
-        
-        # Wait for graph_db to complete
+        # Process results and send dependent tasks
         try:
             graph_db_result = results["graph_db"].get(timeout=240)
             graph_db_dict = json.loads(graph_db_result)
             test_data.kg.kgTriples = graph_db_dict.get("kgTriples", [])
             test_data.kg.ner = graph_db_dict.get("ner", [])
             task_states["graph_db"] = 'COMPLETED'
+            logger.info("Graph DB task completed successfully")
+            
+            # Send prompt task after graph_db completes
+            logger.info(f"Sending data to prompt: {json.dumps(prompt_data, indent=2)}")
+            results["prompt"] = app.send_task(
+                TASK_NAMES["prompt"],
+                args=[json.dumps(prompt_data)],
+                kwargs={"wait_for_kg": True, "wait_for_prompts": False},
+                queue="prompt"
+            )
+            task_states["prompt"] = 'PENDING'
+            
+            # Process prompt results and send LLM task
+            prompt_result = results["prompt"].get(timeout=240)
+            prompt_dict = json.loads(prompt_result)
+            test_data.prompts = prompt_dict.get("prompts", {})
+            task_states["prompt"] = 'COMPLETED'
+            logger.info("Prompt task completed successfully")
+            
+            # Prepare LLM data using the processed prompts
+            llm_data = {
+                "queries": test_data.prompts.get("processedQueries", []),  # Use processed queries
+                "llm": "bert-base-uncased",
+                "waitForPrompts": True
+            }
+            
+            logger.info(f"Sending data to llm: {json.dumps(llm_data, indent=2)}")
+            results["llm"] = app.send_task(
+                TASK_NAMES["llm"],
+                args=[json.dumps(llm_data)],
+                kwargs={"wait_for_prompts": True},
+                queue="llm"
+            )
+            task_states["llm"] = 'PENDING'
+            
         except Exception as e:
-            print(f"Error processing graph_db response: {str(e)}")
+            logger.error(f"Error processing graph_db: {str(e)}")
             task_states["graph_db"] = 'FAILED'
         
-        # Send to prompt
-        prompt_data = {
-            "queries": test_data.queries,
-            "waitForKG": True  
-        }
-        print(f"Sending data to prompt: {json.dumps(prompt_data, indent=2)}")
-        results["prompt"] = app.send_task(TASK_NAMES["prompt"], args=[json.dumps(prompt_data)], queue="prompt")
-        task_states["prompt"] = 'PENDING'
+        # Process remaining results
+        try:
+            llm_result = results["llm"].get(timeout=240)
+            llm_dict = json.loads(llm_result)
+            test_data.llm = llm_dict.get("response", "")
+            task_states["llm"] = 'COMPLETED'
+            logger.info("LLM task completed successfully")
+        except Exception as e:
+            logger.error(f"Error processing llm: {str(e)}")
+            task_states["llm"] = 'FAILED'
         
-        llm_data = {
-            "queries": test_data.queries,
-            "llm": test_data.llm.llm,
-            "waitForPrompts": True  
-        }
-        print(f"Sending data to llm: {json.dumps(llm_data, indent=2)}")
-        results["llm"] = app.send_task(TASK_NAMES["llm"], args=[json.dumps(llm_data)], queue="llm")
-        task_states["llm"] = 'PENDING'
-        
-        # Collect results with individual timeouts
-        for tool, task in results.items():
-            if tool == "chunker":  # Skip chunker as we already handled it
-                continue
-            try:
-                task_states[tool] = 'PROCESSING'
-                result = task.get(timeout=240)  # 2 minutes timeout per task
-                result_dict = json.loads(result)
-                task_states[tool] = 'COMPLETED'
-                print(f"Received result from {tool}: {json.dumps(result_dict, indent=2)}")
-                
-                # Update ProjectData based on tool results
-                if tool == "graph_db":
-                    test_data.kg.kgTriples = result_dict.get("kgTriples", [])
-                    test_data.kg.ner = result_dict.get("ner", [])
-                elif tool == "prompt":
-                    test_data.prompts = result_dict
-                elif tool == "llm":
-                    test_data.llm.llmResult = result_dict.get("llmResult", "")
-                
-                save_result(tool, json.dumps(llm_data), result)
-                
-            except Exception as e:
-                task_states[tool] = 'FAILED'
-                print(f"Error processing {tool}: {str(e)}")
-                save_result(tool, json.dumps(llm_data), f"Error: {str(e)}")
-                
     except Exception as e:
-        print(f"Error initiating tasks: {str(e)}")
-        return test_data.to_dict(), task_states
+        logger.error(f"Error in test workflow: {str(e)}")
+        return False
     
-    return test_data.to_dict(), task_states
-
-
-def wait_for_services():
-    max_retries = 30
-    retry_interval = 5
-    
-    for _ in range(max_retries):
-        try:
-            # Try to connect to RabbitMQ
-            connection = app.connection()
-            connection.connect()
-            connection.release()
-            print("Successfully connected to RabbitMQ")
-            return True
-        except Exception as e:
-            print(f"Waiting for services to be ready... {str(e)}")
-            time.sleep(retry_interval)
-    
-    raise Exception("Services failed to become ready")
-
-
-def wait_for_rabbitmq():
-    """Wait for RabbitMQ to be ready and ensure queues are declared."""
-    print("Waiting for RabbitMQ...")
-    max_retries = 30
-    retry_interval = 2
-    
-    for i in range(max_retries):
-        try:
-            # Try to connect and declare queues
-            with app.connection_for_write() as conn:
-                conn.ensure_connection(max_retries=3)  # Ensure connection is established
-                channel = conn.channel()
-                # Declare queues with more durable settings
-                for queue_name in TASK_NAMES.keys():
-                    queue = Queue(
-                        queue_name,
-                        channel=channel,
-                        durable=True,
-                        auto_delete=False,
-                        arguments={'x-queue-type': 'classic'}
-                    )
-                    queue.declare()
-                    print(f"Declared queue: {queue_name}")
-            print("RabbitMQ is ready!")
-            return True
-        except Exception as e:
-            print(f"Waiting for RabbitMQ... Attempt {i+1}/{max_retries}. Error: {str(e)}")
-            if i == max_retries - 1:
-                print("Detailed connection error:", str(e))
-            time.sleep(retry_interval)
-    
-    raise Exception("RabbitMQ connection failed after maximum retries")
-
+    logger.info(f"Test workflow completed with states: {task_states}")
+    return True
 
 if __name__ == "__main__":
+    logger.info("Starting GAIA system...")
+    
     # Wait for services to be ready
     wait_for_services()
     
@@ -257,10 +158,13 @@ if __name__ == "__main__":
     
     # Initialize the database
     init_db()
+    logger.info("Database initialized")
     
     # Start the monitoring thread
     monitor_thread = threading.Thread(target=monitor_and_scale, daemon=True)
     monitor_thread.start()
+    logger.info("Monitoring thread started")
     
     # Run the test
-    run_test()
+    success = run_test()
+    logger.info(f"Test workflow completed with success={success}")

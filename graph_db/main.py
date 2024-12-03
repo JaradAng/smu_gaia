@@ -183,7 +183,8 @@ def graph_db_task(json_data):
         return json.dumps({"error": f"Invalid JSON input: {str(e)}"})
     except Exception as e:
         logger.error(f"Error in Graph DB processing: {str(e)}")
-        return json.dumps({"error": f"Error in Graph DB processing: {str(e)}"})
+        # return json.dumps({"error": f"Error in Graph DB processing: {str(e)}"})
+        raise e
 
 def send_graph_db_task(data):
     """

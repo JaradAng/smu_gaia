@@ -19,7 +19,7 @@ app = Celery(
 )
 
 @app.task(name="prompt")
-def prompt_task(data):
+def prompt_task(data, wait_for_kg=False, wait_for_prompts=False):
     """
     Task for enhancing prompts.
     Generates three types of prompts based on the input data.
@@ -28,6 +28,12 @@ def prompt_task(data):
     
     try:
         project_data = ProjectData.from_json(data)
+        
+        # Use the additional arguments as needed
+        if wait_for_kg:
+            logger.info("Waiting for Knowledge Graph completion.")
+        if wait_for_prompts:
+            logger.info("Waiting for Prompts completion.")
         
         project_data.prompts.zeroShot = generate_zero_shot_prompt(project_data)
         project_data.prompts.tagBased = generate_tag_based_prompt(project_data)

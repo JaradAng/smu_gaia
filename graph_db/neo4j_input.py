@@ -172,10 +172,21 @@ class Neo4jTripleImporter:
             logger.error(f"Failed to generate Neo4j query: {e}")
             return ""
 
+    # def create_index(self):
+    #     with self.driver.session() as session:
+    #         session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
+    #     logger.info(f"Index 'entityNameIndex' created.")
     def create_index(self):
         with self.driver.session() as session:
-            session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
-        logger.info(f"Index 'entityNameIndex' created.")
+            try:
+                session.run("CREATE FULLTEXT INDEX entityNameIndex FOR (n:Entity) ON EACH [n.name];")
+                logger.info("Index 'entityNameIndex' created successfully.")
+            except neo4j.exceptions.ClientError as e:
+                if "Already exists" in str(e):
+                    logger.info("Index 'entityNameIndex' already exists. Skipping creation.")
+                else:
+                    logger.error(f"Failed to create index: {e}")
+                    raise  # Re-raise exception for unexpected errors
 
     def query_knowledge_graph(self, question: str) -> List[Tuple[str, str, str]]:
         """
