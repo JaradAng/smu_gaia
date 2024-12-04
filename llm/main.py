@@ -9,6 +9,12 @@ import time
 import torch
 import psutil
 from pathlib import Path
+from test_model_download import (
+    check_internet_connection,
+    check_dns_resolution,
+    test_huggingface_api,
+    test_model_file_download  
+)
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -33,7 +39,17 @@ def llm_task(data, wait_for_prompts=False):
     try:
         if wait_for_prompts:
             logger.info("Waiting for prompts completion.")
-            
+        
+        # Perform environment checks
+        if not check_internet_connection():
+            raise Exception("No internet connection.")
+        if not check_dns_resolution():
+            raise Exception("DNS resolution failed for huggingface.co.")
+        if not test_huggingface_api():
+            raise Exception("Failed to access Hugging Face API.")
+        if not test_model_file_download():
+            raise Exception("Failed to download test model file.")
+        
         data_dict = json.loads(data) if isinstance(data, str) else data
         text = data_dict.get("textData", "")
         queries = data_dict.get("queries", [])
