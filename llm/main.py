@@ -2,6 +2,7 @@ from celery import Celery
 from celery.bin import worker as celery_worker
 import logging
 import os
+import shutil
 import json
 from legal_llm_analysis import process_legal_query
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
@@ -58,20 +59,24 @@ def llm_task(data, wait_for_prompts=False):
         # Initialize model and tokenizer
         model_dir = Path('/app/models') / model_name.split('/')[-1]
         model_dir.mkdir(parents=True, exist_ok=True)
-        
-        if (model_dir / 'config.json').exists():
-            logger.info(f"Loading model from local path: {model_dir}")
-            tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
-            model = AutoModelForQuestionAnswering.from_pretrained(str(model_dir))
-        else:
-            logger.info(f"Downloading model from Hugging Face")
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-            
-            # Save model locally
-            logger.info(f"Saving model to {model_dir}")
-            tokenizer.save_pretrained(str(model_dir))
-            model.save_pretrained(str(model_dir))
+        try:
+
+            if (model_dir / 'config.json').exists():
+                logger.info(f"Loading model from local path: {model_dir}")
+                tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+                model = AutoModelForQuestionAnswering.from_pretrained(str(model_dir))
+            else:
+                logger.info(f"Downloading model from Hugging Face")
+                shutil.copyfile('/tmp/config.json','/app/models/bert-base-uncased/config.json')
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+
+                # Save model locally
+                logger.info(f"Saving model to {model_dir}")
+                tokenizer.save_pretrained(str(model_dir))
+                model.save_pretrained(str(model_dir))
+        except PermissionError as e:
+            print(f"Permission error: {e}")
         
         if text and queries:
             responses = []

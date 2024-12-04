@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN useradd --create-home --shell /bin/bash appuser
 
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/models && chown -R appuser:appuser /app/models /app
 
 USER appuser
 

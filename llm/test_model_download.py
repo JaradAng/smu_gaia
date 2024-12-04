@@ -80,8 +80,6 @@ def test_model_file_download():
                     content = json.load(f)
                     logger.info(f"File content: {json.dumps(content, indent=2)}")
                 
-                # Clean up
-                os.remove(temp_file)
                 return True
             else:
                 logger.error(f"File was not saved to {temp_file}")
