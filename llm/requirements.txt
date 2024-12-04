@@ -8,3 +8,4 @@ psutil
 requests
 huggingface_hub
 redis
+bitsandbytes

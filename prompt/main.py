@@ -39,8 +39,8 @@ def prompt_task(data, wait_for_kg=False, wait_for_prompts=False):
             queries=data.get("queries", []),
             id=data.get("id", "default"),
             kg=KnowledgeGraph(
-                kgTriples=[],
-                ner=[]
+                kgTriples=data.get("kgTriples", []),
+                ner=data.get("ner", [])
             )
         )
         
@@ -50,22 +50,25 @@ def prompt_task(data, wait_for_kg=False, wait_for_prompts=False):
         if wait_for_prompts:
             logger.info("Waiting for Prompts completion.")
         
-        # Generate prompts
-        zero_shot = generate_zero_shot_prompt(project_data)
-        tag_based = generate_tag_based_prompt(project_data)
-        reasoning = generate_reasoning_prompt(project_data)
+        # Generate prompts for each query
+        processed_queries = []
+        for query in project_data.queries:
+            zero_shot = generate_zero_shot_prompt(project_data)
+            tag_based = generate_tag_based_prompt(project_data)
+            reasoning = generate_reasoning_prompt(project_data)
+            processed_queries.append(query)
         
-        # Return the results in a structured format
         result = {
             "prompts": {
                 "zeroShot": zero_shot,
                 "tagBased": tag_based,
                 "reasoning": reasoning,
-                "custom": None
+                "custom": None,
+                "processedQueries": processed_queries
             }
         }
         
-        logger.info(f"Prompts generated successfully")
+        logger.info(f"Generated prompts for {len(processed_queries)} queries")
         return json.dumps(result)
         
     except Exception as e:

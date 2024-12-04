@@ -111,6 +111,7 @@ services:
     volumes:
       - huggingface_cache:/root/.cache/huggingface
       - shared_models:/app/models
+      - shared_data:/shared_data
     environment:
       - TRANSFORMERS_CACHE=/root/.cache/huggingface
       - MODEL_PATH=/app/models

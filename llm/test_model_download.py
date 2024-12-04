@@ -35,7 +35,7 @@ def check_dns_resolution():
 def test_huggingface_api():
     try:
         # Try to get model info directly from the Hugging Face API
-        model_id = "bert-base-uncased"
+        model_id = "gpt2"
         api_url = f"https://huggingface.co/api/models/{model_id}"
         
         logger.info(f"Attempting to get model info from {api_url}")
@@ -57,7 +57,7 @@ def test_huggingface_api():
 def test_model_file_download():
     try:
         # Try to download a small file from the model (config.json)
-        model_id = "bert-base-uncased"
+        model_id = "gpt2"
         file_name = "config.json"
         download_url = f"https://huggingface.co/{model_id}/resolve/main/{file_name}"
         
@@ -96,7 +96,7 @@ def test_model_file_download():
 def test_huggingface_hub_download():
     try:
         # Try to download using huggingface_hub
-        model_id = "bert-base-uncased"
+        model_id = "gpt2"
         filename = "config.json"
         
         logger.info(f"Attempting to download {filename} using huggingface_hub...")

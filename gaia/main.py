@@ -121,9 +121,11 @@ def run_test():
             
             # Prepare LLM data using the processed prompts
             llm_data = {
-                "queries": test_data.prompts.get("processedQueries", []),  # Use processed queries
-                "llm": "bert-base-uncased",
-                "waitForPrompts": True
+                # "textData": test_data.textData,  # Add the text data
+                "queries": test_data.queries,    # Use original queries
+                "llm": "gpt2",
+                "waitForPrompts": True,
+                "prompts": prompt_dict.get("prompts", {})  
             }
             
             logger.info(f"Sending data to llm: {json.dumps(llm_data, indent=2)}")
