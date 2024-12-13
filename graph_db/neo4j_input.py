@@ -116,61 +116,92 @@ class Neo4jTripleImporter:
             logger.error(f"Failed to process question: {e}")
             return {}
 
-    def generate_neo4j_query(self, query_elements: Dict[str, Any], question:str) -> str:
-        """
-        Generate a dynamic Cypher query from extracted elements.
-        """
-        nlp = spacy.load("en_core_web_sm")
+def generate_neo4j_query(self, query_elements: Dict[str, Any], question:str) -> str:
+    """
+    Generate a dynamic Cypher query for Neo4j based on extracted query elements.
+    
+    This method supports two query generation strategies:
+    1. When both subject and object are present
+    2. When only keywords are available from the question
+    
+    Args:
+        query_elements (Dict[str, Any]): Dictionary containing extracted query components
+        question (str): Original natural language question
+    
+    Returns:
+        str: A Cypher query string for Neo4j, or an empty string if query generation fails
+    """
+    # Load spaCy's English language model for natural language processing
+    nlp = spacy.load("en_core_web_sm")
 
-        try:
-            subject = query_elements.get('subject', '')
-            predicate = query_elements.get('predicate', '')
-            obj = query_elements.get('object', '')
+    try:
+        # Extract subject and object from query elements
+        subject = query_elements.get('subject', '')
+        predicate = query_elements.get('predicate', '')
+        obj = query_elements.get('object', '')
 
-            logger.info(f"In generate function, this is subject: {subject} and this is object:{obj}")
-            if subject and obj:
-                query = """
-                CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
-                WITH s
-                MATCH (s)-[r]->(o:Entity)
-                WHERE 
+        # Log the extracted subject and object for debugging
+        logger.info(f"In generate function, this is subject: {subject} and this is object:{obj}")
+
+        # Query strategy 1: When both subject and object are present
+        if subject and obj:
+            # Use full-text indexing and Sørensen-Dice similarity for flexible matching
+            query = """
+            # Search for nodes matching the subject and object using full-text index
+            CALL db.index.fulltext.queryNodes("entityNameIndex", $subject + " " + $object) YIELD node AS s
+            WITH s
+            # Match relationships between entities
+            MATCH (s)-[r]->(o:Entity)
+            WHERE 
+                # Flexible matching using Sørensen-Dice similarity coefficient
+                # Allows for slight variations in entity names
                 ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $subject) > 0.6) OR
                 ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $object) > 0.6) OR
                 ($subject IS NOT NULL AND apoc.text.sorensenDiceSimilarity(o.name, $subject) > 0.6) OR
                 ($object IS NOT NULL AND apoc.text.sorensenDiceSimilarity(s.name, $object) > 0.6)
-                RETURN 
+            RETURN 
                 s.name AS subject, 
                 type(r) AS predicate, 
                 o.name AS object
+            LIMIT 10
+            """
+            return query
+        else:
+            # Query strategy 2: Extract keywords from the question when subject/object are not fully specified
+            # Focus on nouns, proper nouns, and adjectives, filtering out very short words
+            keywords = [
+                token.lemma_ for token in nlp(question.lower()) 
+                if token.pos_ in {"NOUN", "PROPN", "ADJ"} 
+                and len(token.lemma_) > 2  # Ignore very short words
+            ]
+            
+            # Remove duplicate keywords
+            keywords = list(set(keywords))
+
+            # If keywords are available, generate a query using keyword matching
+            if len(keywords) != 0:
+                query = """
+                # Iterate through keywords and find matching entities
+                UNWIND $keywords AS keyword
+                MATCH (s:Entity)-[r]->(o:Entity)
+                WHERE 
+                    # Use Sørensen-Dice similarity to match keywords with entity names
+                    apoc.text.sorensenDiceSimilarity(s.name, keyword) > $threshold OR
+                    apoc.text.sorensenDiceSimilarity(o.name, keyword) > $threshold
+                RETURN DISTINCT 
+                    s.name AS subject, 
+                    type(r) AS predicate, 
+                    o.name AS object
                 LIMIT 10
-                        """
+                """
                 return query
             else:
-                keywords = [
-                    token.lemma_ for token in nlp(question.lower()) 
-                    if token.pos_ in {"NOUN", "PROPN", "ADJ"} 
-                    and len(token.lemma_) > 2  # Ignore very short words
-                ]
-                keywords = list(set(keywords))
-                if len(keywords) != 0:
-                    query="""
-                    UNWIND $keywords AS keyword
-                    MATCH (s:Entity)-[r]->(o:Entity)
-                    WHERE 
-                        apoc.text.sorensenDiceSimilarity(s.name, keyword) > $threshold OR
-                        apoc.text.sorensenDiceSimilarity(o.name, keyword) > $threshold
-                    RETURN DISTINCT 
-                        s.name AS subject, 
-                        type(r) AS predicate, 
-                        o.name AS object
-                    LIMIT 10
-                    """
-                    return query
-                else:
-                    return ""
-        except Exception as e:
-            logger.error(f"Failed to generate Neo4j query: {e}")
-            return ""
+                # Return empty string if no meaningful keywords are found
+                return ""
+    except Exception as e:
+        # Log any errors during query generation
+        logger.error(f"Failed to generate Neo4j query: {e}")
+        return ""
 
     # def create_index(self):
     #     with self.driver.session() as session:

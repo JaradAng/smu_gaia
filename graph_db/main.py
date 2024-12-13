@@ -43,7 +43,7 @@ def extract_triples(textData: str):
         # Focus on words that contribute meaningful information
         meaningful_words = [
             t.text for t in words 
-            if t.pos_ in {"NOUN", "PROPN", "ADJ"} or 
+            if t.pos_ in {"NOUN", "PROPN", "ADJ"} or
                t.dep_ in {"compound", "amod", "nn"}
         ]
         
